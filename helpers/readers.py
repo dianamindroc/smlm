@@ -63,7 +63,7 @@ class Reader():
         data = data[data.columns[0].str.split(' ', 4, expand=True)]
         return data
 
-    def get_xyz_array(self, df) -> np.array():
+    def get_xyz_array(self, df) -> np.array:
         """
         Converts the df to a numpy array containing only the x,y,z coordinates.
         :param df: DataFrame to be converted to array
