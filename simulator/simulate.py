@@ -12,8 +12,8 @@ class Simulate():
         """
         Initialization function
         :param jar: path to the suresim .jar file
-        :param model: path to the model file (e.g. .txt file)
-        :param parameters: path to the simulation parameters file ( .json)
+        :param path: path to current working directory
+        :param parameters: path to the simulation folder
         """
         self.jar = jar
         self.path = path
