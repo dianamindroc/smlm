@@ -43,12 +43,12 @@ class Simulate():
         self.parameters = os.path.join(self.folder, 'simulationParameters.json')
         self.model = shutil.copy(self.model, self.folder)
 
-    def simulate(self):
+    def simulate(self, output):
         """
         Method which actually calls the .jar file and runs the simulation
-        :param output: path to where the output folder will be created
+        :param output: name of output folder
         :return: None
         """
-        self.cmd = ['java', '-jar', self.jar, self.model, self.parameters, self.folder + '/output']
+        self.cmd = ['java', '-jar', self.jar, self.model, self.parameters, os.path.join(self.path, self.folder, output)]
         sp.check_output(self.cmd)
 
