@@ -69,6 +69,7 @@ class Reader():
             return self.files
         else:
             self.files = [file for file in self.files if file.endswith(which)]
+            return self.files
 
     def read_csv(self) -> pd.DataFrame:
         """

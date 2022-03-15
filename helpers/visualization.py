@@ -11,7 +11,7 @@ class Visualization():
     def __init__(self, df : pd.DataFrame):
         self.df = df
         self.scatter = []
-    def get_3d_scatter(self):
+    def get_3d_scatter(self) -> px.scatter_3d:
         """
         Gets the interactive 3D scatter plot which can be visualized with the show() method
         :return: plotly scatter plot
@@ -38,7 +38,7 @@ class Visualization():
         self.scatter = scatter
         return scatter
 
-    def get_2d_scatter(self):
+    def get_2d_scatter(self) -> px.scatter:
         """
         Gets the interactive 3D scatter plot which can be visualized with the show() method
         :return: plotly scatter plot

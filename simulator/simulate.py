@@ -21,7 +21,7 @@ class Simulate():
         self.model = os.path.join(self.path, self.folder, 'model_file.txt')
         self.parameters = os.path.join(self.path, self.folder, 'simulationParameters.json')
 
-    def get_params_dict(self):
+    def get_params_dict(self) -> dict:
         """
         Gets the parameters file as a dictionary. Can then be modified as desired and reassigned.
         :return: dictionary
