@@ -2,7 +2,6 @@
 Class for reading raw localization data
 """
 
-import numpy as np
 import pandas as pd
 import os
 
