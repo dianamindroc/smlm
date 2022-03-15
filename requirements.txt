@@ -104,7 +104,7 @@ parso=0.8.3=pypi_0
 partd=1.2.0=pyhd3eb1b0_1
 pexpect=4.8.0=pypi_0
 pickleshare=0.7.5=pypi_0
-pillow=9.0.1=py39hde71d04_0
+pillow>=9.0.1=py39hde71d04_0
 pip=21.2.4=py39hecd8cb5_0
 plotly=5.6.0=pyhd3eb1b0_0
 prometheus-client=0.13.1=pypi_0
