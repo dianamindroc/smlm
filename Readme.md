@@ -22,3 +22,6 @@ project
     │   simulate.py
 ```
 
+#### Simulations
+
+To use the simulation code, one needs to build the original java code of the SureSim simulator from [Kuner Lab](https://github.com/tkunerlab/JavaUmsetzungSTORMSimulation). 
