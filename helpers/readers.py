@@ -53,9 +53,10 @@ class Reader():
                     self.files = os.listdir(self.folder)
             else:
                 self.files = os.listdir(path)
+                self.folder = path
         else:
             self.files = os.listdir(os.path.join(self.path, self.folders[folder_number]))
-            self.set_folder(os.path.join(self.path, self.folders[folder_number]))
+            self.set_folder(folder_number)
         return self.files
 
     def set_file(self, file: int):
