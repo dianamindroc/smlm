@@ -8,7 +8,7 @@ import json
 import shutil
 
 class Simulate():
-    def __init__(self, jar: str, path: str, current_folder: str):
+    def __init__(self, jar: str, path: str, model: str):
         """
         Initialization function
         :param jar: path to the suresim .jar file
@@ -17,9 +17,8 @@ class Simulate():
         """
         self.jar = jar
         self.path = path
-        self.folder = current_folder
-        self.model = os.path.join(self.path, self.folder, 'model_file.txt')
-        self.parameters = os.path.join(self.path, self.folder, 'simulationParameters.json')
+        self.model = os.path.join(self.path, model)
+        self.parameters = os.path.join(self.path, 'simulationParameters.json')
 
     def get_params_dict(self) -> dict:
         """
@@ -36,12 +35,12 @@ class Simulate():
         :param folder_name: name for the new simulation folder
         :return:
         """
-        self.folder = os.path.join(self.path, folder_name)
-        os.mkdir(self.folder)
-        with open(os.path.join(self.folder, 'simulationParameters.json'), 'w') as fp:
+        self.path = os.path.join(self.path, folder_name)
+        os.mkdir(self.path)
+        with open(os.path.join(self.path, 'simulationParameters.json'), 'w') as fp:
             json.dump(self.params_dict, fp)
-        self.parameters = os.path.join(self.folder, 'simulationParameters.json')
-        self.model = shutil.copy(self.model, self.folder)
+        self.parameters = os.path.join(self.path, 'simulationParameters.json')
+        self.model = shutil.copy(self.model, self.path)
 
     def simulate(self, output):
         """
@@ -49,6 +48,6 @@ class Simulate():
         :param output: name of output folder
         :return: None
         """
-        self.cmd = ['java', '-jar', self.jar, self.model, self.parameters, os.path.join(self.path, self.folder, output)]
+        self.cmd = ['java', '-jar', self.jar, self.model, self.parameters, os.path.join(self.path, output)]
         sp.check_output(self.cmd)
 
