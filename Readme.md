@@ -5,21 +5,30 @@ This repository contains scripts, notebooks and helper functions for the PhD pro
 #### Installation 
 Using anaconda package manager, one can create a new environment for this repository and install the dependencies by running  
 
-`conda create --name <env_name> --file requirements.txt`
+`conda create --name <env_name>`
+
+`python setup.py install`
+
 
 #### Contents
 
 ```
-project
+smlm
 │   README.md  
-│   requirements.txt
+│   setup.py
 └───helpers
 │   │   readers.py
 │   │   visualization.py
 └───notebooks
 │   │   visualization.ipynb
+│   │   smlm_preprocessing.ipynb 
+└───scripts
+│   │   run_simulation.py
+│   │   config.yaml
 └───simulator
-    │   simulate.py
+│   │   simulator.py
+│   │   simulate_data.py
+└──────  
 ```
 
 #### Simulations
