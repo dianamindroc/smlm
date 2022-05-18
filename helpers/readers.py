@@ -1,20 +1,25 @@
-"""
-Class for reading raw localization data
-"""
-
 import pandas as pd
 import os
 
 
-class Reader():
-    def __init__(self, folder_path):
+class Reader:
+    """
+    Class used to read raw localization data from .csv or .txt files in a systematic manner.
+    """
+    def __init__(self, folder_path: str):
         """
         Initialize the class.
         :param folder_path: path to main folder containing data
         """
         self.path = folder_path
+        self.folder = self.path
+        self.folders = []
+        self.files = []
+        self.data = pd.DataFrame()
+        self.file = ''
+        self.df_xyz, self.df_xy = pd.DataFrame
 
-    def get_folders(self, which: str = 'all') -> str:
+    def get_folders(self, which: str = 'all') -> [str]:
         """
         Gets folders containing data based on the desired type (2D, 3D, all)
         :param which: string mentioning the type of data that we want to read from the folder, either '2D' or '3D' or 'all'
@@ -28,21 +33,21 @@ class Reader():
 
     def set_folder(self, folder: int = None):
         """
-        Sets working folder
-        :param folder: number of folder inside the main folder; if None, then the main folder is considered the working folder.
+        Sets the working folder
+        :param folder: number of folder inside the main folder; if None, then the main folder is
+        considered the working folder.
         :return: None
         """
         if folder is None:
-            self.folder = self.path
+            print('Working folder will be the main folder.')
         else:
             self.folder = os.path.join(self.path, self.folders[folder])
 
-    def get_files_from_folder(self, folder_number: int = None, path: str = None) -> list:
+    def get_files_from_folder(self, folder_number: int = None, path: str = None) -> [str]:
         """
         Gets the files inside the folder, either directly from a path or from a folder number from the get_folder method.
         :param folder_number: int mentioning which folder from the folder list (from get_folder method) if path is None
         :param path: absolute path to folder to read files from if folder_number is None
-        :param type: string to mention the extension of files to get from folder, e.g. images .png or localizations .csv
         :return: returns a list with the files
         """
         if folder_number is None:
@@ -67,7 +72,7 @@ class Reader():
         """
         self.file = self.files[file]
 
-    def filter(self, which: str) -> list:
+    def filter(self, which: str) -> [str]:
         """
         Filters the files in the folder based on the desired type (.png, .csv, .txt, ...)
         :param which: extension of the desired file type
@@ -82,7 +87,6 @@ class Reader():
     def read_csv(self) -> pd.DataFrame:
         """
         Reads a .csv file containing raw localization data
-        #TODO: rename columns to unified version
         :return: pandas DataFrame
         """
         data = pd.read_csv(os.path.join(self.folder, self.file))
@@ -111,18 +115,22 @@ class Reader():
         df[['x', 'y', 'z']] = self.data[column_names].astype(float)
         self.df_xyz = df
         if save:
-            self.df_xyz.to_csv(os.path.join(self.path, self.folder, self.file + '_xyz.csv'), columns=['x','y','z'], sep=';', index=False)
+            self.df_xyz.to_csv(os.path.join(self.path, self.folder, self.file, '_xyz.csv'), columns=['x', 'y', 'z'],
+                               sep=';', index=False)
         return self.df_xyz
 
     def extract_xy(self, column_indices: list, save: bool = False) -> pd.DataFrame:
         """
         Extract a data frame from the working data frame containing only the x and y coordinates.
-        :param column_indices: list containing int that are the column indices containing x and y coordinates in original data frame.
+        :param column_indices: list containing int that are the column indices containing x and y coordinates
+        in original data frame.
+        :param save: boolean indicating whether saving of the extracted data frame is desired. if True,
         :return: pandas DataFrame
         """
         df = pd.DataFrame()
         df[['x', 'y']] = self.data[column_indices].astype(float)
         self.df_xy = df
         if save:
-            self.df_xy.to_csv(os.path.join(self.path, self.folder, self.file + '_xyz.csv'), columns=['x','y'], sep=';', index=False)
+            self.df_xy.to_csv(os.path.join(self.path, self.folder, self.file, '_xyz.csv'), columns=['x', 'y'],
+                              sep=';', index=False)
         return self.df_xy

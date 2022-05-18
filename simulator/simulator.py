@@ -1,7 +1,4 @@
-"""
-Class for simulating SMLM data using SuReSim simulator (http://www.ana.uni-heidelberg.de/?id=198)
-For examples of model and simulation parameters files, go to https://github.com/tkunerlab/JavaUmsetzungSTORMSimulation/tree/master/examples/cli_example
-"""
+
 import os
 import subprocess as sp
 import json
@@ -9,6 +6,10 @@ import shutil
 
 
 class Simulator:
+    """
+    Class for simulating SMLM data using SuReSim simulator (http://www.ana.uni-heidelberg.de/?id=198)
+    For examples of model and simulation parameters files, go to https://github.com/tkunerlab/JavaUmsetzungSTORMSimulation/tree/master/examples/cli_example
+    """
     def __init__(self, jar: str, path: str, model: str, sim_params: dict):
         """
         Initialization function
@@ -20,6 +21,7 @@ class Simulator:
         self.path = path
         self.model = os.path.join(self.path, model)
         self.params = sim_params
+        # Dumping the simulation parameters in a json file for reproducibility
         with open(os.path.join(self.path, 'simulationParameters.json'), 'w') as fp:
             json.dump(self.params, fp)
             fp.close()
@@ -27,7 +29,7 @@ class Simulator:
 
     def get_params_dict(self) -> dict:
         """
-        Gets the parameters file as a dictionary. Can then be modified as desired and reassigned.
+        Gets the parameters file as a dictionary.
         :return: dictionary
         """
         # p = open(self.parameters)
@@ -56,5 +58,6 @@ class Simulator:
         """
         cmd = ['java', '-jar', self.jar, self.model, self.params_json, os.path.join(self.path, output)]
         sp.check_output(cmd)
+        # Copying the simulation parameters json in the sample folder before overwriting in the next sample.
         shutil.copy(self.params_json, os.path.join(self.path, output))
 

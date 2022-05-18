@@ -1,7 +1,6 @@
 # Simulate point clouds with SureSim
 
-from simulator.simulate import Simulator
-# import scripts.config as c
+from simulator.simulator import Simulator
 import os
 from random import choice
 import numpy as np
@@ -49,7 +48,6 @@ technique = {
               "useSTORMBlinking": 'false'
               }
 }
-
 
 def simulate(config, samples, tech):
     detection_efficiency = np.round(np.linspace(40, 80, 20), 2)
