@@ -1,6 +1,6 @@
 # Simulate point clouds with SureSim
 
-from simulator.simulator import Simulator
+from simulation.simulator import Simulator
 import os
 from random import choice
 import numpy as np

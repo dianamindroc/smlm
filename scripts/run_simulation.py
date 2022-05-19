@@ -1,7 +1,7 @@
 # Script to run simulations from the command line
 
 import argparse
-from simulator.simulate_data import simulate
+from simulation.simulate_data import simulate
 import yaml
 
 if __name__ == '__main__':

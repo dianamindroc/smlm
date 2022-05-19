@@ -7,7 +7,7 @@ Using anaconda package manager, one can create a new environment for this reposi
 
 `conda create --name <env_name>`
 
-`python setup.py install`
+`pip install .` in the smlm folder 
 
 
 #### Contents
