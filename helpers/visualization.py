@@ -4,7 +4,7 @@ import numpy as np
 from skimage import exposure
 
 
-class Visualization:
+class Visualization3D:
     """
     Class for visualizing point cloud data.
     """
@@ -12,7 +12,7 @@ class Visualization:
         self.df = df
         self.scatter = []
 
-    def get_3d_scatter(self) -> px.scatter_3d:
+    def get_3d_scatter(self, size=0.5, color='cyan') -> px.scatter_3d:
         """
         Gets the interactive 3D scatter plot which can be visualized with the show() method
         :return: plotly scatter plot
@@ -29,8 +29,8 @@ class Visualization:
         for traces in fig_traces:
             scatter.append_trace(traces, row=1, col=1)
 
-        scatter.update_traces(marker=dict(size=0.5,
-                                          color='cyan'),
+        scatter.update_traces(marker=dict(size=size,
+                                          color=color),
                               selector=dict(mode='markers'))
         scatter.update_layout(height=400,
                               width=700,
@@ -39,6 +39,16 @@ class Visualization:
         scatter.update_yaxes(showgrid=False)
         self.scatter = scatter
         return scatter
+
+
+class Visualization2D:
+    """
+    Class for visualizing point cloud data.
+    """
+    def __init__(self, df: pd.DataFrame):
+        self.df = df
+        self.scatter = []
+        self.get_2d_scatter()
 
     def get_2d_scatter(self) -> px.scatter:
         """
@@ -55,7 +65,17 @@ class Visualization:
             self.scatter = scatter
         return scatter
 
-    def loc2img(self, pixel_size : int = 10):
+
+class loc2img:
+    """
+    Class for visualizing point cloud data.
+    """
+    def __init__(self, df: pd.DataFrame):
+        self.df = df
+        self.scatter = []
+        self.loc2img()
+
+    def loc2img(self, pixel_size: int = 10):
         """
         Method taken from P. Kollmannsberger for reconstructing 2D localizations into an image
         :param pixel_size: size of the pixel for visualization

@@ -17,7 +17,8 @@ class Reader:
         self.files = []
         self.data = pd.DataFrame()
         self.file = ''
-        self.df_xyz, self.df_xy = pd.DataFrame
+        self.df_xyz = pd.DataFrame()
+        self.df_xy = pd.DataFrame()
 
     def get_folders(self, which: str = 'all') -> [str]:
         """

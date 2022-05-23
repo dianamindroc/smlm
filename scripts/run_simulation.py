@@ -3,6 +3,7 @@
 import argparse
 from simulation.simulate_data import simulate
 import yaml
+import timeit
 
 if __name__ == '__main__':
     print('\n--------------------')
@@ -15,6 +16,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     config = yaml.safe_load(open(args.config, 'r'))
     samples = int(args.samples)
+    start_time = timeit.default_timer()
     simulate(config, samples, args.technique)
-    print('Simulation finished.')
+    stop_time = timeit.default_timer()
+    print('Simulation finished. Simulation time of ',samples, 'samples was ',stop_time-start_time)
     print('--------------------')
