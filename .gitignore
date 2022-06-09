@@ -12,5 +12,7 @@ __pycache__
 build/
 dist/
 
-/scripts/test.py
-/notebooks/*.html
+scripts/test.py
+notebooks/*.html
+
+
