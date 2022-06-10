@@ -49,10 +49,6 @@ The simulator is containerized in a Singularity container and can be obtained by
 
 `singularity build simulator_container.sif simulator.def`
 
-or downloading it from Singularity Hub 
-
-`singularity pull library://dianamindroc/smlm_simulator/simulation_container`
-
 The container expects a folder `model` in the working directory which contains the ground truth model to simulate samples from. Accepted formats are .wimp and .txt. 
 Afterwards, to run a simulation from the container, run the command 
 
