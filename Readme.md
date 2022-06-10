@@ -43,11 +43,24 @@ Default number of simulated samples is 15. The default microscopy technique used
 
 #### Containerized application
 
-The simulator is containerized in a Singularity container and can be obtained by pulling the image from Singularity Hub: 
+Prerequisites: [Singularity](https://sylabs.io/guides/3.0/user-guide/quick_start.html) installed on the host machine.
 
-`singularity pull --arch amd64 library://dianamindroc/smlm_simulator/simulator_container:latest`
+The simulator is containerized in a Singularity container and can be obtained by building the container from the definition file provided in `/container/simulator.def` with the command 
 
-Prerequisite is installing singularity on the local machine. 
-To use the container, run the singularity run command together with the configuration .yaml file (see `/scripts/config.yaml) `that specifies the desired model: 
+`singularity build simulator_container.sif simulator.def`
 
-`singularity run simulator_container.sif config.yaml`
+or downloading it from Singularity Hub 
+
+`singularity pull library://dianamindroc/smlm_simulator/simulation_container`
+
+The container expects a folder `model` in the working directory which contains the ground truth model to simulate samples from. Accepted formats are .wimp and .txt. 
+Afterwards, to run a simulation from the container, run the command 
+
+`singularity run simulator_container.sif 10 dstorm` , where 10 is the number of desired simulated samples and dstorm is the microscopy technique (options: dstorm or palm).
+
+If another folder is to be used for models, the container can be run in interactive mode: 
+
+`singularity shell simulator_container.sif`
+
+Edit the config file accordingly and run `python3 /smlm/scripts/run_simulation.py --config new_config.yaml` with default 15 samples and dstorm technique or `smlm/scripts/run_simulation.py --config new_config.yaml -s number_of_samples -t technique`
+

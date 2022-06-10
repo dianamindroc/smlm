@@ -1,0 +1,47 @@
+Bootstrap: docker
+
+From: ubuntu:20.04
+
+%post
+
+	apt-get update
+	# set noninteractive installation
+        export DEBIAN_FRONTEND=noninteractive
+        # install tzdata package
+        apt-get install -y tzdata
+        # set your timezone
+        ln -fs /usr/share/zoneinfo/Europe/Berlin /etc/localtime
+        dpkg-reconfigure --frontend noninteractive tzdata
+	apt-get install -y python3 
+	apt-get install -y python3-pip
+	apt-get install -y git
+	apt-get install -y maven 
+	apt-get install -y default-jdk
+	git clone https://github.com/tkunerlab/JavaUmsetzungSTORMSimulation.git
+	cd JavaUmsetzungSTORMSimulation/STORMVis
+	mvn clean
+	mvn install
+	mvn package
+	cd ../..
+	mkdir output
+	git clone https://github.com/dianamindroc/smlm.git
+	cd smlm
+	pip install . 
+	cd scripts
+	echo 'jar_path: "/JavaUmsetzungSTORMSimulation/STORMVis/target/suresim_cli.jar-jar-with-dependencies.jar"' >> config.yaml	
+
+%runscript
+	cp /smlm/scripts/config.yaml .
+	echo models: $PWD/model >> config.yaml 
+	python3 /smlm/scripts/run_simulation.py --config config.yaml -s $1 -t $2
+			
+%environment 
+	export PYTHONPATH=/usr/bin/python3.8
+
+%labels 
+	author Diana Mindroc
+	affiliation CIA, CCTB, Uni Wuerzburg
+	creation date May 2022
+
+%help
+	Container with SMLM simulator 	
