@@ -22,10 +22,12 @@ smlm
 └───notebooks
 │   │   visualization.ipynb
 │   │   smlm_preprocessing.ipynb 
+└───preprocessing
+│   │   preprocessing.py
 └───scripts
 │   │   run_simulation.py
 │   │   config.yaml
-└───simulator
+└───simulation
 │   │   simulator.py
 │   │   simulate_data.py
 └──────  
