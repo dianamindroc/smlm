@@ -47,7 +47,7 @@ Prerequisites: [Singularity](https://sylabs.io/guides/3.0/user-guide/quick_start
 
 The simulator is containerized in a Singularity container and can be obtained by building the container from the definition file provided in `/container/simulator.def` with the command 
 
-`singularity build simulator_container.sif simulator.def`
+`singularity build simulator_container.sif simulation.def`
 
 The container expects a folder `model` in the working directory which contains the ground truth model to simulate samples from. Accepted formats are .wimp and .txt. 
 Afterwards, to run a simulation from the container, run the command 
@@ -58,5 +58,5 @@ If another folder is to be used for models, the container can be run in interact
 
 `singularity shell simulator_container.sif`
 
-Edit the config file accordingly and run `python3 /smlm/scripts/run_simulation.py --config new_config.yaml` with default 15 samples and dstorm technique or `smlm/scripts/run_simulation.py --config new_config.yaml -s number_of_samples -t technique`
+Edit the config file accordingly and run `python3 /smlm/scripts/run_simulation.py --config new_config.yaml` inside the container with default 15 samples and dstorm technique or `smlm/scripts/run_simulation.py --config new_config.yaml -s number_of_samples -t technique`
 

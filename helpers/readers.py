@@ -71,7 +71,7 @@ class Reader:
         :param file: int to mention which file from files list to set as working file.
         :return: None
         """
-        self.file = self.files[file]
+        self.file = os.path.join(self.folder, self.files[file])
 
     def filter(self, which: str) -> [str]:
         """
