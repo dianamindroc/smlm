@@ -1,7 +1,5 @@
 # paths for regularly used files or programs
   
-jar_path: '/Users/dianamindroc/Desktop/PhD/Code/suresim-code/JavaUmsetzungSTORMSimulation/STORMVis/target/suresim_cli.jar-jar-with-dependencies.jar'
+jar_path: '/home/dim26fa/coding/JavaUmsetzungSTORMSimulation/STORMVis/target/suresim_cli.jar-jar-with-dependencies.jar'
   
-models: '/Users/dianamindroc/Desktop/PhD/Data/suresim_simulations/IMOD_models/model_0'
-jar_path: "/JavaUmsetzungSTORMSimulation/STORMVis/target/suresim_cli.jar-jar-with-dependencies.jar"
-models: /home/dim26fa/coding/smlm_v2/scripts/model
+models: '/home/dim26fa/data/imod_models/model_1'
