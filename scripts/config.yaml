@@ -3,3 +3,5 @@
 jar_path: '/Users/dianamindroc/Desktop/PhD/Code/suresim-code/JavaUmsetzungSTORMSimulation/STORMVis/target/suresim_cli.jar-jar-with-dependencies.jar'
   
 models: '/Users/dianamindroc/Desktop/PhD/Data/suresim_simulations/IMOD_models/model_0'
+jar_path: "/JavaUmsetzungSTORMSimulation/STORMVis/target/suresim_cli.jar-jar-with-dependencies.jar"
+models: /home/dim26fa/coding/smlm_v2/scripts/model

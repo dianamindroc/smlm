@@ -22,3 +22,4 @@ if __name__ == '__main__':
     stop_time = timeit.default_timer()
     print('Simulation finished. Simulation time of ',samples, 'samples was ',stop_time-start_time)
     print('--------------------')
+
