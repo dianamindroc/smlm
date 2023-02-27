@@ -11,6 +11,8 @@ __pycache__
 *.egg
 build/
 dist/
+data/
+models/
 
 scripts/test.py
 scripts/*.def
@@ -18,4 +20,14 @@ scripts/*.sif
 scripts/*.yaml
 
 notebooks/*.html
+notebooks/GeometricShapes
+notebooks/data
 
+data/
+
+pointnet/
+dgcnn/
+
+notebooks/KarateClub
+notebooks/runs
+notebooks/Graph Autoencoder_files
