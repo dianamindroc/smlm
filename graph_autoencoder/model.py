@@ -30,10 +30,11 @@ class GAEModel(torch.nn.Module):
             self.encoder = GCNEncoder(self.config.model.nr_features, self.config.model.output)
         else:
             raise NotImplementedError('Encoder not implemented.')
-        self.optimizer = self.config.train.optimizer.type(self.parameters(), lr=self.config.train.optimizer.lr)
+        if self.config.train.optimizer.type == 'adam':
+            self.optimizer = torch.optim.Adam(self.parameters(), lr=self.config.train.optimizer.lr)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.decoder = GAE(self.encoder).to(self.device)
-        self.load_data()
+        #self.load_data()
 
     def load_data(self):
         """
