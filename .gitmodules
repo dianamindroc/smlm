@@ -1,3 +1,4 @@
 [submodule "submodules/dgcnn"]
 	path = submodules/dgcnn
 	url = https://github.com/antao97/dgcnn.pytorch.git
+	ignore = untracked
