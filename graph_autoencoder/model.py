@@ -6,7 +6,7 @@ import torch
 
 from helpers.config import Config
 
-# from .dgcnn.pytorch.model import PointNet
+from submodules.dgcnn.model import PointNet, DGCNN_cls, DGCNN_seg
 
 class GCNEncoder(torch.nn.Module):
     """
@@ -28,6 +28,12 @@ class GAEModel(torch.nn.Module):
         self.config = Config.from_json(cfg)
         if self.config.model.encoder == 'GCNConv':
             self.encoder = GCNEncoder(self.config.model.nr_features, self.config.model.output)
+        elif self.config.model.encoder == 'PointNet':
+            self.encoder = PointNet(self.config.model.nr_features, output_channels=self.config.model.output)
+        elif self.config.model.encoder == 'DGCNN_cls':
+            self.encoder = DGCNN_cls(self.config.model.nr_features, output_channels=self.config.model.output)
+        elif self.config.model.encoder == 'DGCNN_seg':
+            self.encoder = DGCNN_seg(self.config.model.nr_features, output_channels=self.config.model.output)
         else:
             raise NotImplementedError('Encoder not implemented.')
         if self.config.train.optimizer.type == 'adam':

@@ -25,9 +25,6 @@ notebooks/data
 
 data/
 
-pointnet/
-dgcnn/
-
 notebooks/KarateClub
 notebooks/runs
 notebooks/Graph Autoencoder_files
