@@ -60,8 +60,3 @@ def plot_dna_origami_smlm(model_structure, dna_origami):
     plot_singular_structure(model_structure, 'red')
     for origami in dna_origami:
         plot_singular_structure(origami)
-
-
-cube = generate_cube(0, 0, 0, 5)
-dna_origami = generate_dna_origami_smlm(cube, 2, 100)
-plot_dna_origami_smlm(cube,dna_origami)
