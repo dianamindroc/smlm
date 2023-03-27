@@ -1,10 +1,11 @@
 from setuptools import setup, find_packages
 
-pkgs = ['pandas~=1.3.3',
+pkgs = ['pandas~=1.5.3',
         'plotly~=5.3.1',
-        'numpy~=1.21.2',
-        'scikit-image~=0.18.3',
-        'pyyaml~=6.0'
+        'numpy~=1.24.2',
+        'scikit-image~=0.20.0',
+        'pyyaml~=6.0',
+        'torch~=2.0.0'
         ]
 
 setup(name='SMLM Simulator',
