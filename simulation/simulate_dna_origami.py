@@ -43,19 +43,13 @@ class SMLMDnaOrigami:
 
     @staticmethod
     def generate_pyramid(base_side_length, height):
-        # calculate half the length of the base
         half_base = base_side_length / 2.0
-        # calculate the height of the triangle that makes up the base
-        base_height = math.sqrt((base_side_length**2) - (2 * half_base)**2)
-        # calculate the coordinates of the apex of the pyramid
         corners = []
         corners.append((0, height, 0))
-        # calculate the coordinates of the four corners of the base
         corners.append((-half_base, 0, -half_base))
         corners.append((half_base, 0, -half_base))
         corners.append((half_base, 0, half_base))
         corners.append((-half_base, 0, half_base))
-        # return a list of all the corners of the pyramid
         return corners
 
     @staticmethod
