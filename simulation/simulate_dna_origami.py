@@ -4,7 +4,15 @@ import random
 import math
 
 
-def generate_cube(x, y, z, size):
+def generate_cube(x: int, y: int, z: int, size: int):
+    """"
+    Generates a cube with the first corner at the x,y,z coordinates and a specific size
+    :param x: x coordinate
+    :param y: y coordinate
+    :param z: z coordinate
+    :param size: the size of one edge
+    :return: returns a list of tuples containing the coordinates
+    """
     corners = [(x, y, z),
                (x+size, y, z),
                (x+size, y+size, z),
@@ -36,7 +44,13 @@ def plot_singular_structure(corners, color='blue'):
 
 
 def generate_points_3d(center, radius, num_points):
-    # Generate random 3D points around center coordinates within radius of 10
+    """"
+    Function to generate random points around a center
+    :param center: the coordinates of the center
+    :param radius: the radius in which the points should be generated. The points will be generated inside the radius as well, not only at the radius
+    :param num_points: the number of points to generate
+    :return: list of generated points
+    """
     points = []
     for i in range(num_points):
         r = random.uniform(0, radius)
@@ -49,14 +63,25 @@ def generate_points_3d(center, radius, num_points):
     return points
 
 
-def generate_dna_origami_smlm(model_structure, radius, num_points):
+def generate_dna_origami_smlm(model_structure: list, radius: int, num_localizations: int):
+    """"
+    Function to generate a dna origami similar structure as from single-molecule localization microscopy (smlm)
+    :param model_structure: the initial coordinates around which to generate random localizations. Typically list of tuples containing the x,y,z coordinates
+    :param radius: the radius in which the localizations should be generated. The localizations will
+    be generated inside the radius as, not only at the radius
+    :param num_localizations: the desired number of localizations to generate
+    :return: returns list of generated localizations around the initial coordinates
+    """
     dna_origami = []
     for corner in model_structure:
-        dna_origami.append(generate_points_3d(corner, radius, num_points))
+        dna_origami.append(generate_points_3d(corner, radius, num_localizations))
     return dna_origami
 
 
 def plot_dna_origami_smlm(model_structure, dna_origami):
+    """
+    Plots the dna origami final structure
+    """
     plot_singular_structure(model_structure, 'red')
     for origami in dna_origami:
         plot_singular_structure(origami)
