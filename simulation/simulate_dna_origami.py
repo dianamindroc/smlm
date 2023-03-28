@@ -8,13 +8,16 @@ class SMLMDnaOrigami:
     def __init__(self, struct_type: str, number_dna_origami_samples: int):
         self.struct_type = struct_type
         self.number_samples = number_dna_origami_samples
+        self.dna_origami_list = []
         self.dna_origami = []
         if struct_type == 'cube':
             x, y, z, size = [int(x) for x in input("Enter cube coordinates and size: ").split()]
             self.model_structure = self.generate_cube(x, y, z, size)
         elif struct_type == 'pyramid':
-            base, height = [int(x) for x in input("Enter cube coordinates and size: ").split()]
+            base, height = [int(x) for x in input("Enter pyramid base edge size and height: ").split()]
             self.model_structure = self.generate_pyramid(base, height)
+        else:
+            raise NotImplementedError("Only cube and pyramid supported at the moment :)")
         self.radius = int(input("What is the radius in which to generate SMLM samples?"))
         self.number_localizations = int(input("How many localizations to generate around each center?"))
         self.base_folder = input("Where to save the generated samples?")
@@ -84,6 +87,7 @@ class SMLMDnaOrigami:
         """
         for corner in self.model_structure:
             self.dna_origami.append(self.generate_points_3d(corner, self.radius, self.number_localizations))
+            self.dna_origami_list.append(self.dna_origami)
 
     def generate_all_dna_origami_smlm_samples(self):
         for i in range(self.number_samples):
