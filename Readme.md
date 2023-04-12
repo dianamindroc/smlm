@@ -47,7 +47,7 @@ Default number of simulated samples is 15. The default microscopy technique used
 
 Prerequisites: [Singularity](https://sylabs.io/guides/3.0/user-guide/quick_start.html) installed on the host machine.
 
-The simulator is containerized in a Singularity container and can be obtained by building the container from the definition file provided in `/container/simulator.def` with the command 
+The simulator is containerized in a Singularity container and can be obtained by building the container from the definition file provided in `/container/simulation.def` with the command 
 
 `singularity build simulator_container.sif simulation.def`
 
