@@ -16,6 +16,8 @@ Using anaconda package manager, one can create a new environment for this reposi
 smlm
 │   README.md  
 │   setup.py
+└───container
+|   |   simulation.def
 └───helpers
 │   │   readers.py
 │   │   visualization.py
