@@ -24,6 +24,8 @@ notebooks/GeometricShapes
 notebooks/data
 
 data/
+wandb/
+build/
 
 notebooks/KarateClub
 notebooks/runs
