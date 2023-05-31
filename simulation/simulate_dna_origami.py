@@ -118,9 +118,16 @@ class SMLMDnaOrigami:
             ax = fig.add_subplot(111, projection='3d')
         else:
             ax = plt.gca()
-        x = [corner[0] for corner in corners]
-        y = [corner[1] for corner in corners]
-        z = [corner[2] for corner in corners]
+        if 'tuple' in type(corners):
+            x = [corner[0] for corner in corners]
+            y = [corner[1] for corner in corners]
+            z = [corner[2] for corner in corners]
+        elif 'DataFrame' in type(corners):
+            x = corners['x']
+            y = corners['y']
+            z = corners['z']
+        else:
+            raise FileNotFoundError('Data is empty.')
         ax.scatter(x, y, z, color=color)
         ax.set_xlabel('x')
         ax.set_ylabel('y')
