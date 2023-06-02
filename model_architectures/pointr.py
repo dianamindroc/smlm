@@ -5,9 +5,11 @@
 
 
 from functools import partial, reduce
+
+import numpy
 from timm.models.layers import DropPath, trunc_normal_
 #from extensions.chamfer_dist import ChamferDistanceL1
-from model_architectures.chamfer_distances import ChamferDistanceL2
+from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 from model_architectures.transformer_utils import *
 from model_architectures.utils import fps, jitter_points
 
@@ -974,12 +976,12 @@ class AdaPoinTr(nn.Module):
         self.build_loss_func()
 
     def build_loss_func(self):
-        self.loss_func = ChamferDistanceL2()
+        self.loss_func = ChamferDistanceL1()
 
-    def get_loss(self, ret, gt, epoch=1):
-        pred_coarse, denoised_coarse, denoised_fine, pred_fine = ret
-
-        assert pred_fine.size(1) == gt.size(1)
+    def get_loss(self, ret, gt):
+        #pred_coarse, denoised_coarse, denoised_fine, pred_fine = ret
+        pred_coarse, pred_fine, denoised_coarse, denoised_fine = ret
+        #assert pred_fine.size(1) == gt.size(1)
 
         # denoise loss
         idx = knn_point(self.factor, gt, denoised_coarse)  # B n k
@@ -1031,7 +1033,8 @@ class AdaPoinTr(nn.Module):
             assert pred_fine.size(1) == self.num_query * self.factor
             assert pred_coarse.size(1) == self.num_query
 
-            ret = (pred_coarse, denoised_coarse, denoised_fine, pred_fine)
+            ret = (pred_coarse, pred_fine, denoised_coarse, denoised_fine)
+
             return ret
 
         else:
@@ -1043,3 +1046,20 @@ class AdaPoinTr(nn.Module):
 
             ret = (coarse_point_cloud, rebuild_points)
             return ret
+
+
+def validate(model, recon, gt, chamfer1, chamfer2, metric):
+    #model.eval()
+    #ret = model(recon)
+    coarse_points = recon[0]
+    fine_points = recon[1]
+    print(coarse_points)
+    print(fine_points)
+    coarse_loss_l1 = chamfer1(coarse_points, gt)
+    coarse_loss_l2 = chamfer2(coarse_points, gt)
+    fine_loss_l1 = chamfer1(fine_points, gt)
+    fine_loss_l2 = chamfer2(fine_points, gt)
+
+    loss = coarse_loss_l1.item() + coarse_loss_l2.item() + fine_loss_l1.item() + fine_loss_l2.item()
+
+    return numpy.average(loss)
