@@ -1,31 +1,44 @@
-model : {
-    NAME: AdaPoinTr,
-    num_query: 512,
-    num_points: 16384,
-    center_num: [512, 256],
-    global_feature_dim: 1024,
-    encoder_type: graph,
-    decoder_type: fc,
-    encoder_config: {
-      embed_dim: 384,
-      depth: 6,
-      num_heads: 6,
-      k: 8,
-      n_group: 2,
-      mlp_ratio: 2.,
-      block_style_list: ['attn-graph', 'attn', 'attn', 'attn', 'attn', 'attn'],
-      combine_style: 'concat',
-    },
-    decoder_config: {
-      embed_dim: 384,
-      depth: 8,
-      num_heads: 6,
-      k: 8,
-      n_group: 2,
-      mlp_ratio: 2.,
-      self_attn_block_style_list: ['attn-graph', 'attn', 'attn', 'attn', 'attn', 'attn', 'attn', 'attn'],
-      self_attn_combine_style: 'concat',
-      cross_attn_block_style_list: ['attn-graph', 'attn', 'attn', 'attn', 'attn', 'attn', 'attn', 'attn'],
-      cross_attn_combine_style: 'concat',
-    }
-}
+dataset:
+  root_folder: '/mnt/c/Users/diana/PhD/data/shapenet'
+  classes: ['all']
+  suffix: '.pts'
+model: 'fold'
+train:
+  lr: 0.0001
+  batch_size: 32
+  num_workers: 4
+  num_epochs: 200
+  cd_loss: 'ChamferDistanceL2'
+  early_stop_patience: 15
+  log_dir: '/mnt/c/Users/diana/PhD/coding/training'
+pcn_config:
+  coarse_dim: 16384
+  fine_dim: 1024
+adapointr_config:
+  NAME: 'AdaPoinTr'
+  num_query: 512
+  num_points: 16384
+  center_num: [512, 256]
+  global_feature_dim: 1024
+  encoder_type: 'graph'
+  decoder_type: 'fc'
+  encoder_config:
+    embed_dim: 384
+    depth: 6
+    num_heads: 6
+    k: 8
+    n_group: 2
+    mlp_ratio: 2.0
+    block_style_list: ['attn-graph', 'attn', 'attn', 'attn', 'attn', 'attn']
+    combine_style: 'concat'
+  decoder_config:
+    embed_dim: 384
+    depth: 8
+    num_heads: 6
+    k: 8
+    n_group: 2
+    mlp_ratio: 2.0
+    self_attn_block_style_list: ['attn-graph', 'attn', 'attn', 'attn', 'attn', 'attn', 'attn', 'attn']
+    self_attn_combine_style: 'concat'
+    cross_attn_block_style_list: ['attn-graph', 'attn', 'attn', 'attn', 'attn', 'attn', 'attn', 'attn']
+    cross_attn_combine_style: 'concat'

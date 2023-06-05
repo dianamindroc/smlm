@@ -7,6 +7,8 @@ import torch.nn as nn
 from pointnet2_ops import pointnet2_utils
 import yaml
 from easydict import EasyDict
+from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
+
 
 def show_point_cloud(point_cloud, axis=False):
     """visual a point cloud
@@ -128,6 +130,7 @@ class LoadConfig():
             else:
                 setattr(self, key, value)
 
+
 def merge_new_config(config, new_config):
     for key, val in new_config.items():
         if not isinstance(val, dict):
@@ -147,6 +150,7 @@ def merge_new_config(config, new_config):
         merge_new_config(config[key], val)
     return config
 
+
 def cfg_from_yaml_file(cfg_file):
     config = EasyDict()
     with open(cfg_file, 'r') as f:
@@ -158,9 +162,15 @@ def cfg_from_yaml_file(cfg_file):
     return config
 
 
-if __name__ == '__main__':
-    pcs = torch.rand(32, 3, 1024)
-    knn_index = knn(pcs, 16)
-    print(knn_index.size())
-    knn_pcs = index_points(pcs.permute(0, 2, 1), knn_index)
-    print(knn_pcs.size())
+def l2_cd_metric(pcs1, pcs2):
+    dist1, dist2 = ChamferDistanceL2(pcs1, pcs2)
+    dist1 = torch.mean(dist1, dim=1)
+    dist2 = torch.mean(dist2, dim=1)
+    return torch.sum(dist1 + dist2)
+
+
+def l1_cd_metric(pcs1, pcs2):
+    dist1, dist2 = ChamferDistanceL1(pcs1, pcs2)
+    dist1 = torch.mean(torch.sqrt(dist1), 1)
+    dist2 = torch.mean(torch.sqrt(dist2), 1)
+    return torch.sum(dist1 + dist2) / 2

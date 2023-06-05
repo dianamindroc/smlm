@@ -5,7 +5,7 @@ import math
 import pandas as pd
 
 class SMLMDnaOrigami:
-    def __init__(self, struct_type: str, number_dna_origami_samples: int):
+    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True):
         self.struct_type = struct_type
         self.number_samples = number_dna_origami_samples
         self.dna_origami_list = []
@@ -16,12 +16,18 @@ class SMLMDnaOrigami:
         elif struct_type == 'pyramid':
             base, height = [int(x) for x in input("Enter pyramid base edge size and height: ").split()]
             self.model_structure = self.generate_pyramid(base, height)
+        elif struct_type == 'sphere':
+            radius, latitude_divisions, longitude_divisions = [int(x) for x in input("Enter sphere radius, "
+                                                                                     "nr. of latitude_divisions "
+                                                                                     "and nr. of longitude_divisions: ").split()]
+            self.model_structure = self.generate_sphere(radius, latitude_divisions, longitude_divisions)
         else:
             raise NotImplementedError("Only cube and pyramid supported at the moment :)")
         self.radius = int(input("What is the radius in which to generate SMLM samples?"))
         self.number_localizations = int(input("How many localizations to generate around each center?"))
         self.base_folder = input("Where to save the generated samples?")
-        self.save_model_structure()
+        if save_model:
+            self.save_model_structure()
         self.generate_all_dna_origami_smlm_samples()
 
     @staticmethod
@@ -54,6 +60,23 @@ class SMLMDnaOrigami:
         corners.append((half_base, 0, half_base))
         corners.append((-half_base, 0, half_base))
         return corners
+
+    @staticmethod
+    def generate_sphere(radius, latitude_divisions, longitude_divisions):
+        coordinates = []
+
+        for lat in range(latitude_divisions):
+            for lon in range(longitude_divisions):
+                theta = 2 * math.pi * lon / longitude_divisions
+                phi = math.pi * (lat + 0.5) / latitude_divisions
+
+                x = radius * math.sin(phi) * math.cos(theta)
+                y = radius * math.sin(phi) * math.sin(theta)
+                z = radius * math.cos(phi)
+
+                coordinates.append((x, y, z))
+
+        return coordinates
 
     @staticmethod
     def generate_points_3d(center, radius, num_points):

@@ -1,3 +1,5 @@
+# Copyright <2023> <https://github.com/qinglew/PCN-PyTorch>
+
 import torch
 import torch.nn as nn
 

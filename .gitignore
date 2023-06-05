@@ -6,6 +6,7 @@ __pycache__
 .ipynb_checkpoints
 
 .DS_Store
+.gitmodules
 
 *.egg-info/
 *.egg
@@ -26,6 +27,10 @@ notebooks/data
 data/
 wandb/
 build/
+submodules/
+log*/
+
+resources/paths.txt
 
 notebooks/KarateClub
 notebooks/runs

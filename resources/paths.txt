@@ -1,0 +1,3 @@
+shapenet = '/mnt/c/Users/diana/PhD/data/shapenet'
+one_infer = '/mnt/c/Users/diana/PhD/data/one_infer'
+model_path = '/mnt/c/Users/diana/PhD/coding/training/model_lowest_cd_loss.pth'
