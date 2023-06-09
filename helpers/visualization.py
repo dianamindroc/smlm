@@ -93,13 +93,13 @@ class loc2img:
         return img, equalized
 
 
-def print_pc(pc_list):
-    # import matplotlib.pyplot as plt
+def print_pc(pc_list, permutation=False):
+    import matplotlib.pyplot as plt
     fig = plt.figure()
     for i, pc in enumerate(pc_list):
         if torch.is_tensor(pc):
-            arr = pc.permute(0, 2, 1)
-            arr = arr.detach().cpu().numpy()
+            #arr = pc.permute(0, 2, 1)
+            arr = pc.detach().cpu().numpy()
             arr = arr[0]
         else:
             if pc.ndim == 2:
@@ -114,6 +114,7 @@ def print_pc(pc_list):
         ax.scatter(x, y, z)
     # fig.title('cd is ' + str(cd))
     plt.show()
+
 
 
 def save_plots(epoch, loss, pc_list, path):
@@ -147,3 +148,25 @@ def save_plots(epoch, loss, pc_list, path):
     filename = f"/epoch_{epoch}_loss_{loss:.4f}.png"
     plt.savefig(full_path + filename)
     plt.close()
+
+def print_pc(pc_list, permutation=False):
+    import matplotlib.pyplot as plt
+    fig = plt.figure()
+    for i, pc in enumerate(pc_list):
+        if torch.is_tensor(pc):
+            if permutation:
+                arr = pc.permute(0, 2, 1)
+                arr = arr.detach().cpu().numpy()[0]
+            else:
+                arr = pc.detach().cpu().numpy()[0]
+        else:
+            if isinstance(pc, np.ndarray) and pc.ndim == 2:
+                arr = pc
+            else:
+                arr = pc.transpose(0, 2, 1)[0]
+        ax = fig.add_subplot(1, 2, i + 1, projection='3d')
+        x = arr[:, 0]
+        y = arr[:, 1]
+        z = arr[:, 2]
+        ax.scatter(x, y, z)
+    plt.show()

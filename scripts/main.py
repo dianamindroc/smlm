@@ -9,6 +9,7 @@ from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric
 from dataset.SMLMDataset import Dataset
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 from model_architectures.pointr import validate
+from chamferdist import ChamferDistance
 
 import torch
 import torch.optim as optim
@@ -20,12 +21,18 @@ from shutil import copyfile
 from torchvision import transforms
 
 
+#TODO: add how to install pointnet2_ops and chamfer packages in your environment
+#TODO: nice to have - automatically check for cuda version and update if necessary
+#TODO: add in readme that cuda version has to be updated before the chamfer libraries can be installed, ideally have also ninja build system;
+#TODO: add in readme that you need the pointr and pcn chamfer dependencies - have to be installed manually from the repo in your env
+
+
 wandb.login()
-config = cfg_from_yaml_file('configs/config.yaml')
+#cfg = cfg_from_yaml_file('configs/config.yaml')
 
 
-def run_training(config, log_wandb = True):
-    config = cfg_from_yaml_file('configs/config.yaml')
+def run_training(config, log_wandb=True):
+    #config = cfg_from_yaml_file(config_file)
     # Load models
     if config.model == 'fold':
         model = folding_net.AutoEncoder()
@@ -47,7 +54,7 @@ def run_training(config, log_wandb = True):
         "batch_size": config.train.batch_size,
         "num_workers": config.train.num_workers,
         "num_epochs": config.train.num_epochs,
-        "cd_loss": ChamferDistanceL2() if config.train.cd_loss == 'ChamferDistanceL2' else ChamferDistanceL1(),
+        "cd_loss": ChamferDistance(),
         "early_stop_patience": config.train.early_stop_patience
     }
 
@@ -56,7 +63,8 @@ def run_training(config, log_wandb = True):
     log_dir = create_log_folder(config.train.log_dir)
 
     if log_wandb:
-    # Load params in wandb config
+
+        # Load params in wandb config
         wandb.init(project='autoencoder training', name=str(model).split('(')[0], config=train_config)
         wandb.config['optimizer'] = optimizer
         wandb.config['scheduler'] = scheduler
@@ -80,7 +88,7 @@ def run_training(config, log_wandb = True):
     # wandb.watch(model)
     batches = int(len(train_dataset) / train_config['batch_size'] + 0.5)
     best_epoch = -1
-    min_cd_loss = 1e3
+    #min_cd_loss = 5e4
     no_improvement = 0
     current_lr = train_config['lr']
     model_saved = False
@@ -116,6 +124,7 @@ def run_training(config, log_wandb = True):
                 ls = loss1 + alpha * loss2
             elif config.model == 'fold':
                 ls = train_config['cd_loss'](point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))
+                print('### Loss is:', ls)
             elif config.model == 'pointr':
                 # ls = train_config['cd_loss'](point_clouds, recons)
                 sparse_loss, dense_loss = model.get_loss(recons, point_clouds)
@@ -124,6 +133,7 @@ def run_training(config, log_wandb = True):
                 raise NotImplementedError('Something was wrong with the loss calculation.')
             if log_wandb:
                 wandb.log({"training_step_loss": ls})
+
             optimizer.zero_grad()
             ls.backward()
             optimizer.step()
@@ -138,7 +148,8 @@ def run_training(config, log_wandb = True):
         # mean_cd_loss_train = total_cd_loss_train * (int(len(train_dataset)/train_config['batch_size']))
         if log_wandb:
             wandb.log({"training_loss": mean_cd_loss_train, "epoch": epoch})
-
+        if epoch == 1:
+            min_cd_loss = mean_cd_loss_train
         # evaluation
         model.eval()
         total_cd_loss_val = 0
@@ -151,6 +162,7 @@ def run_training(config, log_wandb = True):
                     point_clouds = point_clouds.permute(0, 2, 1)
                 point_clouds = point_clouds.to(device)
                 recons = model(point_clouds)
+                print(recons.shape)
                 if config.model == 'pcn':
                     ls = l1_cd_metric(recons[0], point_clouds)
                 elif config.model == 'fold':
@@ -162,7 +174,7 @@ def run_training(config, log_wandb = True):
                     wandb.log({"val_step_loss": ls})
                 if sample_to_save_path in data['path']:
                     index = data['path'].index(sample_to_save_path)
-                    sample_to_save = [data['pc'][index], recons[index]]
+                    sample_to_save = [data['pc'][index], recons.permute(0, 2, 1)[index]]
 
 
         # calculate the mean cd loss
@@ -221,6 +233,29 @@ def run_training(config, log_wandb = True):
     wandb.finish()
 
 
+def infer_dataset(data_path, highest_shape, model_path, model_load, permute=True):
+    pc_transforms = transforms.Compose([Padding(highest_shape), ToTensor()])
+    infer_dataset = Dataset(data_path, '.pts', transform=pc_transforms, classes_to_use='all')
+    infer_dataloader = torch.utils.data.DataLoader(infer_dataset, batch_size=1, shuffle=True, num_workers=4)
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    model_dict = torch.load(model_path)
+    model = model_load
+    model.load_state_dict(model_dict)
+    model.to(device)
+    model.eval()
+    for i, data in enumerate(infer_dataloader):
+        point_clouds = data['pc']
+        if permute:
+            point_clouds = point_clouds.permute(0, 2, 1)
+        point_clouds = point_clouds.to(device)
+        with torch.no_grad():
+            recon = model(point_clouds)
+        loss = ChamferDistanceL2()
+        ls = loss(point_clouds.permute(0, 2, 1), recon.permute(0, 2, 1))
+        print(ls, data['path'])
+    return recon, point_clouds, ls
+
+
 def infer(data_path, highest_shape, model_path, model_load, permute=True):
     pc_transforms = transforms.Compose([Padding(highest_shape), ToTensor()])
     infer_dataset = Dataset(data_path, '.pts', transform=pc_transforms, classes_to_use='all')
@@ -244,7 +279,6 @@ def infer(data_path, highest_shape, model_path, model_load, permute=True):
     return recon, point_clouds, ls
 
 
-
 if __name__ == "__main__":
     print("\n########################")
     print("Point Cloud reconstruction")
@@ -252,7 +286,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Point Cloud reconstruction')
     parser.add_argument('--config', type=str, help='Path to the configuration file', required=True)
     args = parser.parse_args()
-    # config = cfg_from_yaml_file(args.config)
-    config = cfg_from_yaml_file('/configs/config.yaml')
-    # run_training(config)
+    config = cfg_from_yaml_file(args.config)
+    #conf = cfg_from_yaml_file('/configs/config.yaml')
+    run_training(config)
     print('Done')
+

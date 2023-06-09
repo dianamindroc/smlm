@@ -1,7 +1,7 @@
 dataset:
-  root_folder: '/mnt/c/Users/diana/PhD/data/shapenet'
+  root_folder: '/mnt/c/Users/diana/PhD/data/dna'
   classes: ['all']
-  suffix: '.pts'
+  suffix: '.csv'
 model: 'fold'
 train:
   lr: 0.0001

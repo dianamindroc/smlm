@@ -19,8 +19,8 @@ class Dataset(DS):
         else:
             self.classes_to_use = classes_to_use
         self.transform = transform
-        if self.suffix == '.pts':
-            self.labels = assign_labels(root_folder)
+        #if self.suffix == '.pts':
+        self.labels = assign_labels(root_folder)
         # Find all files in the root folder with the given suffix
         self.filepaths = []
         for subdir, dirs, files in os.walk(self.root_folder):
