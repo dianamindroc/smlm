@@ -1,7 +1,7 @@
 dataset:
-  root_folder: '/mnt/c/Users/diana/PhD/data/dna'
+  root_folder: 'home/dim26fa/data/shapenet'
   classes: ['all']
-  suffix: '.csv'
+  suffix: '.pts'
 model: 'fold'
 train:
   lr: 0.0001
@@ -10,7 +10,7 @@ train:
   num_epochs: 200
   cd_loss: 'ChamferDistanceL2'
   early_stop_patience: 15
-  log_dir: '/mnt/c/Users/diana/PhD/coding/training'
+  log_dir: '/home/dim26fa/coding/training'
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

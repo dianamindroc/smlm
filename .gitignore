@@ -35,5 +35,6 @@ resources/paths.txt
 notebooks/KarateClub
 notebooks/runs
 notebooks/Graph Autoencoder_files
-requirements.txt
-requirements.txt
+/container/training.sif
+/container/config.yaml
+/requirements2.txt
