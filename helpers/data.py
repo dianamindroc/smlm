@@ -71,7 +71,7 @@ def get_highest_shape(root_folder, classes):
         print(f"CSV file '{csv_file}' does not exist.")
 
     highest = 0
-    if classes == 'all':
+    if 'all' in classes:
         cls = os.listdir(root_folder)
     else:
         cls = classes

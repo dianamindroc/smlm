@@ -117,7 +117,7 @@ def print_pc(pc_list, permutation=False):
 
 
 
-def save_plots(epoch, loss, pc_list, path):
+def save_plots(epoch, train_val, loss, pc_list, path):
     fig = plt.figure()
 
     for i, pc in enumerate(pc_list):
@@ -140,7 +140,10 @@ def save_plots(epoch, loss, pc_list, path):
     plt.suptitle(f"Epoch: {epoch}, Loss: {loss}")
 
     # Create a directory to save the plots if it doesn't exist
-    full_path = path + "/plots"
+    if train_val == 'train':
+        full_path = path + "/plots/train"
+    else:
+        full_path = path + "/plots/val"
     if not os.path.exists(full_path):
         os.makedirs(full_path)
 

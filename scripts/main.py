@@ -25,6 +25,8 @@ from torchvision import transforms
 #TODO: nice to have - automatically check for cuda version and update if necessary
 #TODO: add in readme that cuda version has to be updated before the chamfer libraries can be installed, ideally have also ninja build system;
 #TODO: add in readme that you need the pointr and pcn chamfer dependencies - have to be installed manually from the repo in your env
+#TODO: add plots in wandb when loss is better, check in wandb if all the config file is stored
+
 
 
 wandb.login()
@@ -93,8 +95,8 @@ def run_training(config, log_wandb=True):
     current_lr = train_config['lr']
     model_saved = False
     train_step = 0
-    sample_to_save_path = None
-
+    sample_to_save_path_val = None
+    sample_to_save_path_train = None
     print("The shape of the input tensor is", next(iter(train_dataloader))['pc'].shape)
 
     # Start training and evaluation
@@ -105,6 +107,8 @@ def run_training(config, log_wandb=True):
         model.train()
         total_cd_loss_train = 0
         for i, data in enumerate(train_dataloader):
+            if sample_to_save_path_train is None:
+                sample_to_save_path_train = data['path'][0]
             point_clouds = data['pc']
             if not config.model == 'pointr':
                 point_clouds = point_clouds.permute(0, 2, 1)
@@ -140,6 +144,10 @@ def run_training(config, log_wandb=True):
             total_cd_loss_train += ls
             train_step += 1
 
+            if sample_to_save_path_train in data['path']:
+                index = data['path'].index(sample_to_save_path_train)
+                sample_to_save_train = [data['pc'][index], recons.permute(0, 2, 1)[index]]
+
             if (i + 1) % 100 == 0:
                 print('Epoch {}/{} with iteration {}/{}: CD loss is {}.'.format(epoch, train_config['num_epochs'] *
                                                                                 train_config['batch_size'], i + 1,
@@ -150,13 +158,15 @@ def run_training(config, log_wandb=True):
             wandb.log({"training_loss": mean_cd_loss_train, "epoch": epoch})
         if epoch == 1:
             min_cd_loss = mean_cd_loss_train
+
+        save_plots(epoch, "train", mean_cd_loss_train, sample_to_save_train, log_dir)
         # evaluation
         model.eval()
         total_cd_loss_val = 0
         with torch.no_grad():
             for data in val_dataloader:
-                if sample_to_save_path is None:
-                    sample_to_save_path = data['path'][0]
+                if sample_to_save_path_val is None:
+                    sample_to_save_path_val = data['path'][0]
                 point_clouds = data['pc']
                 if not config.model == 'pointr':
                     point_clouds = point_clouds.permute(0, 2, 1)
@@ -172,9 +182,9 @@ def run_training(config, log_wandb=True):
                 total_cd_loss_val += ls
                 if log_wandb:
                     wandb.log({"val_step_loss": ls})
-                if sample_to_save_path in data['path']:
-                    index = data['path'].index(sample_to_save_path)
-                    sample_to_save = [data['pc'][index], recons.permute(0, 2, 1)[index]]
+                if sample_to_save_path_val in data['path']:
+                    index = data['path'].index(sample_to_save_path_val)
+                    sample_to_save_val = [data['pc'][index], recons.permute(0, 2, 1)[index]]
 
 
         # calculate the mean cd loss
@@ -195,7 +205,7 @@ def run_training(config, log_wandb=True):
             min_cd_loss = mean_cd_loss
             best_epoch = epoch
             torch.save(model.state_dict(), os.path.join(log_dir, 'model_lowest_cd_loss.pth'))
-            save_plots(epoch, mean_cd_loss, sample_to_save, log_dir)
+            save_plots(epoch, "val", mean_cd_loss, sample_to_save_val, log_dir)
         else:
             no_improvement += 1
             if no_improvement > train_config['early_stop_patience']:
