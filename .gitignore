@@ -30,6 +30,11 @@ build/
 submodules/
 log*/
 
+configs/*fold*.yaml
+configs/*adapointr*.yaml
+configs/*pcn*.yaml
+
+
 resources/paths.txt
 
 notebooks/KarateClub

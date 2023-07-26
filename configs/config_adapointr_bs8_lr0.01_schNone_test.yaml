@@ -1,0 +1,74 @@
+adapointr_config:
+  NAME: AdaPoinTr
+  center_num:
+  - 512
+  - 256
+  decoder_config:
+    cross_attn_block_style_list:
+    - attn-graph
+    - attn
+    - attn
+    - attn
+    - attn
+    - attn
+    - attn
+    - attn
+    cross_attn_combine_style: concat
+    depth: 8
+    embed_dim: 384
+    k: 8
+    mlp_ratio: 2.0
+    n_group: 2
+    num_heads: 6
+    self_attn_block_style_list:
+    - attn-graph
+    - attn
+    - attn
+    - attn
+    - attn
+    - attn
+    - attn
+    - attn
+    self_attn_combine_style: concat
+  decoder_type: fc
+  encoder_config:
+    block_style_list:
+    - attn-graph
+    - attn
+    - attn
+    - attn
+    - attn
+    - attn
+    combine_style: concat
+    depth: 6
+    embed_dim: 384
+    k: 8
+    mlp_ratio: 2.0
+    n_group: 2
+    num_heads: 6
+  encoder_type: graph
+  global_feature_dim: 1024
+  num_points: 16384
+  num_query: 512
+dataset:
+  classes:
+  - all
+  root_folder: /home/dim26fa/data/shapenet
+  suffix: .pts
+model: pointr
+pcn_config:
+  coarse_dim: 16384
+  fine_dim: 1024
+train:
+  batch_size: 8
+  cd_loss: ChamferDistanceL2
+  early_stop_patience: 300
+  gamma: 1.0e-06
+  log_dir: /home/dim26fa/coding/training
+  lr: 0.0001
+  momentum: 0.9
+  momentum2: 0.999
+  num_epochs: 1000
+  num_workers: 4
+  scheduler_type: null
+  pointr_loss: all

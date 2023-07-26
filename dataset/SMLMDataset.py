@@ -8,12 +8,13 @@ from helpers.data import get_label, read_pts_file, assign_labels
 
 
 class Dataset(DS):
-    def __init__(self, root_folder, suffix, transform=None, classes_to_use=None):
+    def __init__(self, root_folder, suffix, transform=None, classes_to_use=None, data_augmentation=False):
         super().__init__()
         if classes_to_use is None:
             classes_to_use = ['cube', 'pyramid']
         self.root_folder = root_folder
         self.suffix = suffix
+        self.data_augmentation = data_augmentation
         if 'all' in classes_to_use:
             self.classes_to_use = os.listdir(root_folder)
         else:
@@ -58,6 +59,12 @@ class Dataset(DS):
             label = self.labels[cls]
         else:
             raise NotImplementedError("This label is not included in the current dataset.")
+
+        if self.data_augmentation:
+            theta = np.random.uniform(0, np.pi * 2)
+            rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+            arr[:, [0, 2]] = arr[:, [0, 2]].dot(rotation_matrix)  # random rotation
+            arr += np.random.normal(0, 0.02, size=arr.shape)  # random jitter
 
         sample = {'pc': arr,
                   'label': np.array(label),

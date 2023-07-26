@@ -1,5 +1,15 @@
 import argparse
 
+import torch
+import torchvision
+import torch.optim as optim
+import wandb
+import time
+import os
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
+from shutil import copyfile
+from torchvision import transforms
+
 from helpers.data import get_highest_shape
 from helpers.logging import create_log_folder
 from helpers.visualization import print_pc, save_plots
@@ -10,15 +20,7 @@ from dataset.SMLMDataset import Dataset
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 from model_architectures.pointr import validate
 from chamferdist import ChamferDistance
-
-import torch
-import torch.optim as optim
-import wandb
-import time
-import os
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from shutil import copyfile
-from torchvision import transforms
+#from chamfer_distance.chamfer_distance import ChamferDistance
 
 
 #TODO: add how to install pointnet2_ops and chamfer packages in your environment
@@ -31,8 +33,8 @@ wandb.login()
 #cfg = cfg_from_yaml_file('configs/config.yaml')
 
 
-def run_training(config, log_wandb=True):
-    #config = cfg_from_yaml_file(config_file)
+def run_training(config_file, log_wandb=True):
+    config = cfg_from_yaml_file(config_file)
     # Load models
     if config.model == 'fold':
         model = folding_net.AutoEncoder()
@@ -55,11 +57,17 @@ def run_training(config, log_wandb=True):
         "num_workers": config.train.num_workers,
         "num_epochs": config.train.num_epochs,
         "cd_loss": ChamferDistance(),
-        "early_stop_patience": config.train.early_stop_patience
+        "early_stop_patience": config.train.early_stop_patience,
+        'momentum': config.train.momentum,
+        'momentum2': config.train.momentum2,
+        'scheduler_type': config.train.scheduler_type,
+        'gamma': float(config.train.gamma)
     }
 
-    optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=[0.9, 0.999])
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=4, verbose=True)
+    optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=[train_config['momentum'], train_config['momentum2']], weight_decay = train_config['gamma'])
+    if train_config['scheduler_type'] != 'None':
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=4, verbose=True)
+        print('Scheduler activated tananana')
     log_dir = create_log_folder(config.train.log_dir)
 
     if log_wandb:
@@ -67,13 +75,14 @@ def run_training(config, log_wandb=True):
         # Load params in wandb config
         wandb.init(project='autoencoder training', name=str(model).split('(')[0], config=train_config)
         wandb.config['optimizer'] = optimizer
-        wandb.config['scheduler'] = scheduler
+        #wandb.config['scheduler'] = scheduler
 
     # Load data
     pc_transforms = transforms.Compose(
         [Padding(highest_shape), ToTensor()]
     )
-    full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes)
+    full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes, data_augmentation=True)
+
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
@@ -106,10 +115,12 @@ def run_training(config, log_wandb=True):
         total_cd_loss_train = 0
         for i, data in enumerate(train_dataloader):
             point_clouds = data['pc']
-            if not config.model == 'pointr':
+            if config.model == 'fold' or config.model == 'pcn':
                 point_clouds = point_clouds.permute(0, 2, 1)
             point_clouds = point_clouds.to(device)
+            #print('This are the pointcloud shape', point_clouds.shape)
             recons = model(point_clouds)
+            #print('This is the recon shape', recons[0].shape)
             if config.model == 'pcn':
                 if train_step < 10000:
                     alpha = 0.01
@@ -124,11 +135,11 @@ def run_training(config, log_wandb=True):
                 ls = loss1 + alpha * loss2
             elif config.model == 'fold':
                 ls = train_config['cd_loss'](point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))
-                print('### Loss is:', ls)
             elif config.model == 'pointr':
                 # ls = train_config['cd_loss'](point_clouds, recons)
                 sparse_loss, dense_loss = model.get_loss(recons, point_clouds)
                 ls = sparse_loss + dense_loss
+                #TODO: check pointr code for why does he do smth with shapenet dataset
             else:
                 raise NotImplementedError('Something was wrong with the loss calculation.')
             if log_wandb:
@@ -144,8 +155,10 @@ def run_training(config, log_wandb=True):
                 print('Epoch {}/{} with iteration {}/{}: CD loss is {}.'.format(epoch, train_config['num_epochs'] *
                                                                                 train_config['batch_size'], i + 1,
                                                                                 batches, ls / len(point_clouds)))
-        mean_cd_loss_train = (total_cd_loss_train * train_config['batch_size']) / len(train_dataset)
-        # mean_cd_loss_train = total_cd_loss_train * (int(len(train_dataset)/train_config['batch_size']))
+        #mean_cd_loss_train = (total_cd_loss_train * train_config['batch_size']) / len(train_dataset)
+        mean_cd_loss_train = total_cd_loss_train / (len(train_dataset)/train_config['batch_size'])
+        print('\033[32mEpoch {}/{}: reconstructed Chamfer Distance is {} in epoch {}.\033[0m'.format(
+            epoch, train_config['num_epochs'], mean_cd_loss_train, best_epoch))
         if log_wandb:
             wandb.log({"training_loss": mean_cd_loss_train, "epoch": epoch})
         if epoch == 1:
@@ -158,31 +171,76 @@ def run_training(config, log_wandb=True):
                 if sample_to_save_path is None:
                     sample_to_save_path = data['path'][0]
                 point_clouds = data['pc']
-                if not config.model == 'pointr':
+                if config.model == 'fold' or config.model == 'pcn':
                     point_clouds = point_clouds.permute(0, 2, 1)
                 point_clouds = point_clouds.to(device)
+                #print('This is val point_clouds shape', point_clouds.shape)
                 recons = model(point_clouds)
-                print(recons.shape)
+                #print('This is val reconds0 shape', recons[0].shape)
                 if config.model == 'pcn':
-                    ls = l1_cd_metric(recons[0], point_clouds)
+                    if train_step < 10000:
+                        alpha = 0.01
+                    elif train_step < 20000:
+                        alpha = 0.1
+                    elif train_step < 50000:
+                        alpha = 0.5
+                    else:
+                        alpha = 1.0
+                    loss1 = losses.cd_loss_l1(recons[0], point_clouds)
+                    loss2 = losses.cd_loss_l2(recons[1], point_clouds)
+                    ls = loss1 + alpha * loss2
                 elif config.model == 'fold':
                     ls = train_config['cd_loss'](point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))
                 elif config.model == 'pointr':
-                    ls = validate(model, recons, point_clouds, ChamferDistanceL1(), ChamferDistanceL2(), 'CD')
-                total_cd_loss_val += ls
-                if log_wandb:
-                    wandb.log({"val_step_loss": ls})
+                    # ls = train_config['cd_loss'](point_clouds, recons)
+                    coarse_points = recons[0]
+                    dense_points = recons[-1]
+                    sl1 =  losses.cd_loss_l1(coarse_points, point_clouds)
+                    sl2 =  losses.cd_loss_l2(coarse_points, point_clouds)
+                    dl1 =  losses.cd_loss_l1(dense_points, point_clouds)
+                    dl2 =  losses.cd_loss_l2(dense_points, point_clouds)
+                    if 'all' in config.train.pointr_loss:
+                        ls = (sl1 + sl2 + dl1 + dl2) / 4
+                    elif 'sl1' in config.train.pointr_loss:
+                        ls = sl1
+                    elif 'sl2' in config.train.pointr_loss:
+                        ls = sl2
+                    elif 'dl1' in config.train.pointr_loss:
+                        ls = dl1
+                    elif 'dl2' in config.train.pointr_loss:
+                        ls = dl2
+                    #sparse_loss, dense_loss = model.get_loss(recons, point_clouds)
+                else:
+                    raise NotImplementedError('Something was wrong with the loss calculation.')
+                if config.model == 'fold' or config.model == 'pcn':
+                    total_cd_loss_val += ls
+                    if log_wandb:
+                        wandb.log({"val_step_loss": ls})
+                elif config.model == 'pointr':
+                    total_cd_loss_val += ls
+                    if log_wandb:
+                        wandb.log({'val_step_loss ls': ls, 'sl1': sl1, 'sl2': sl2, 'dl1': dl1, 'dl2': dl2})
+
                 if sample_to_save_path in data['path']:
                     index = data['path'].index(sample_to_save_path)
-                    sample_to_save = [data['pc'][index], recons.permute(0, 2, 1)[index]]
+                    if config.model == 'pointr':
+                        sample_to_save = [data['pc'][index], recons[-1][index]]
+                    elif config.model == 'pcn':
+                        sample_to_save = [data['pc'][index], recons[0][index]]
+                    else:
+                        sample_to_save = [data['pc'][index], recons.permute(0, 2, 1)[index]]
+                if (i + 1) % 100 == 0:
+                    print('Epoch {}/{} with iteration {}/{}: Val CD loss is {:.2f}.'.format(epoch, train_config['num_epochs'] *
+                                                                                train_config['batch_size'], i + 1,
+                                                                                batches, ls))
 
-
+            mean_cd_loss = total_cd_loss_val / (len(val_dataset)/train_config['batch_size'])
         # calculate the mean cd loss
-        mean_cd_loss = (total_cd_loss_val * train_config['batch_size']) / len(val_dataset)
-        # mean_cd_loss = total_cd_loss_val * (int(len(val_dataset) / train_config['batch_size']))
-        scheduler.step(mean_cd_loss)
-        if current_lr is not optimizer.param_groups[0]['lr'] and train_config[
-                                                                        'early_stop_patience'] - no_improvement <= 2:
+        # ean_cd_loss = (total_cd_loss_val * train_config['batch_size']) / len(val_dataset)
+
+        if train_config['scheduler_type'] != 'None':
+            scheduler.step(mean_cd_loss)
+        if current_lr is not optimizer.param_groups[0]['lr'] and train_config['early_stop_patience'] - no_improvement <= 2:
             # we want to let the training run a few epochs with the new learning rate, therefore we add this if-clause
             no_improvement -= 2
             current_lr = optimizer.param_groups[0]['lr']
@@ -200,10 +258,10 @@ def run_training(config, log_wandb=True):
             no_improvement += 1
             if no_improvement > train_config['early_stop_patience']:
                 print(
-                    '\033[Early stoppage at epoch {}/{}: ; Reconstructed Chamfer Distance is {}. Minimum cd loss is {} in epoch {}.\033[0m'.format(
+                    '\033[Early stoppage at epoch {}/{}: ; Reconstructed Chamfer Distance is {:.2f}. Minimum cd loss is {:.2f} in epoch {}.\033[0m'.format(
                         epoch, train_config['num_epochs'], mean_cd_loss, min_cd_loss, best_epoch))
 
-                filename = "/mnt/c/Users/diana/PhD/coding/training/model_" + str(model).split('(')[0] + '.h5'
+                filename = str(config.train.log_dir) + str(model).split('(')[0] + '.h5'
                 if log_wandb:
                     wandb.log({"epoch_stoppage": epoch})
                     wandb.save(filename)
@@ -221,13 +279,13 @@ def run_training(config, log_wandb=True):
         cost = end - start
 
         print(
-            '\033[32mEpoch {}/{}: reconstructed Chamfer Distance is {}. Minimum cd loss is {} in epoch {}.\033[0m'.format(
+            '\033[32mEpoch {}/{}: Val reconstructed Chamfer Distance is {:.2f}. Minimum cd loss is {:.2f} in epoch {}.\033[0m'.format(
                 epoch, train_config['num_epochs'], mean_cd_loss, min_cd_loss, best_epoch))
         print('\033[31mCost {} minutes and {} seconds\033[0m'.format(int(cost // 60), int(cost % 60)))
         if log_wandb:
             wandb.log({"lr": current_lr})
     if not model_saved and log_wandb:
-        filename = "/mnt/c/Users/diana/PhD/coding/training/model_" + str(model).split('(')[0] + '.h5'
+        filename = str(config.train.log_dir) + str(model).split('(')[0] + '.h5'
         wandb.save(filename)
         copyfile(filename, wandb.run.dir)
     wandb.finish()

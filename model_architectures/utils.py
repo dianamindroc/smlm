@@ -2,6 +2,7 @@ import random
 
 import numpy as np
 import torch
+import torchvision
 import matplotlib.pyplot as plt
 import torch.nn as nn
 from pointnet2_ops import pointnet2_utils

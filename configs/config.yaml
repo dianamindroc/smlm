@@ -1,16 +1,20 @@
 dataset:
-  root_folder: 'home/dim26fa/data/shapenet'
+  root_folder: '/home/dim26fa/data/shapenet'
   classes: ['all']
   suffix: '.pts'
 model: 'fold'
 train:
   lr: 0.0001
-  batch_size: 32
+  batch_size: 16
   num_workers: 4
-  num_epochs: 200
+  momentum: 0.9
+  momentum2: 0.999
+  num_epochs: 1000
   cd_loss: 'ChamferDistanceL2'
-  early_stop_patience: 15
+  early_stop_patience: 300
   log_dir: '/home/dim26fa/coding/training'
+  scheduler_type: None
+  gamma: 1e-6
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

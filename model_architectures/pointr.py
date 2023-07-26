@@ -9,10 +9,11 @@ from functools import partial, reduce
 
 import numpy
 from timm.models.layers import DropPath, trunc_normal_
-#from extensions.chamfer_dist import ChamferDistanceL1
+from extensions.chamfer_dist import ChamferDistanceL1
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 from model_architectures.transformer_utils import *
 from model_architectures.utils import fps, jitter_points
+from chamferdist import ChamferDistance
 
 
 class SelfAttnBlockApi(nn.Module):
@@ -977,7 +978,7 @@ class AdaPoinTr(nn.Module):
         self.build_loss_func()
 
     def build_loss_func(self):
-        self.loss_func = ChamferDistanceL1()
+        self.loss_func = ChamferDistance()
 
     def get_loss(self, ret, gt):
         #pred_coarse, denoised_coarse, denoised_fine, pred_fine = ret
@@ -998,6 +999,8 @@ class AdaPoinTr(nn.Module):
         loss_recon = loss_coarse + loss_fine
 
         return loss_denoised, loss_recon
+
+
 
     def forward(self, xyz):
         q, coarse_point_cloud, denoise_length = self.base_model(xyz)  # B M C and B M 3
@@ -1064,3 +1067,4 @@ def validate(model, recon, gt, chamfer1, chamfer2, metric):
     loss = coarse_loss_l1.item() + coarse_loss_l2.item() + fine_loss_l1.item() + fine_loss_l2.item()
 
     return numpy.average(loss)
+

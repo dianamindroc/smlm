@@ -5,7 +5,14 @@ pkgs = ['pandas~=1.5.3',
         'numpy~=1.24.2',
         'scikit-image~=0.20.0',
         'pyyaml~=6.0',
-        'torch~=2.0.0'
+        'torch~=2.0.0',
+        'chamferdist~=1.0.0',
+        'matplotlib~=3.7',
+        'einops~=0.6',
+        'imageio~=2.30',
+        'timm~=0.9',
+        'ninja~=1.7',
+        'easydict~=1.1'
         ]
 
 setup(name='SMLM Simulator',
