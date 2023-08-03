@@ -127,5 +127,18 @@ def downsample_one(file_path, downsample_factor):
     downsampled_data = pd.DataFrame(np.asarray(down_pc.points), columns=['x', 'y', 'z'])
     downsampled_data.to_csv(file_path.split('.')[0] + '.csv', index=False)
 
+def denoise_one(file, min_cluster_size, min_samples, outlier_threshold):
+    if isinstance(file, pd.DataFrame):
+        data = file
+    elif isinstance(file, str):
+        data = pd.read_csv(file)
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples, gen_min_span_tree=True,
+                                        algorithm='best', alpha=0.7, metric='euclidean')
+    clusterer.fit(data)
+    threshold = pd.Series(clusterer.outlier_scores_).quantile(outlier_threshold)
+    outliers = np.where(clusterer.outlier_scores_ > threshold)[0]
+    denoised_data = data.drop(data.index[outliers])
+    return denoised_data
+
 
 

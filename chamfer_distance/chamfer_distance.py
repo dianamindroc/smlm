@@ -1,7 +1,9 @@
-
 import torch
+import torch.nn as nn
 
 from torch.utils.cpp_extension import load
+
+
 cd = load(name="cd",
           sources=["chamfer_distance/chamfer_distance.cpp",
                    "chamfer_distance/chamfer_distance.cu"])
@@ -52,6 +54,17 @@ class ChamferDistanceFunction(torch.autograd.Function):
         return gradxyz1, gradxyz2
 
 
-class ChamferDistance(torch.nn.Module):
+class ChamferDistance(nn.Module):
+    def __init__(self):
+        super().__init__()
+
     def forward(self, xyz1, xyz2):
-        return ChamferDistanceFunction.apply(xyz1, xyz2)
+        """
+        Args:
+            xyz1: tensor with size of (B, N, 3)
+            xyz2: tensor with size of (B, M, 3)
+        """
+        dist1, dist2 =  ChamferDistanceFunction.apply(xyz1, xyz2)  # (B, N), (B, M)
+        mean_dist1 = dist1.mean(dim=-1, keepdim=True)  # (B, 1)
+        mean_dist2 = dist2.mean(dim=-1, keepdim=True)  # (B, 1)
+        return torch.max(torch.cat([mean_dist1, mean_dist2], dim=1), dim=1)[0].sum()

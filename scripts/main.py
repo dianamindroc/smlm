@@ -20,6 +20,7 @@ from dataset.SMLMDataset import Dataset
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 from model_architectures.pointr import validate
 from chamferdist import ChamferDistance
+
 #from chamfer_distance.chamfer_distance import ChamferDistance
 
 
@@ -61,14 +62,18 @@ def run_training(config_file, log_wandb=True):
         'momentum': config.train.momentum,
         'momentum2': config.train.momentum2,
         'scheduler_type': config.train.scheduler_type,
-        'gamma': float(config.train.gamma)
+        'gamma': float(config.train.gamma),
+        'step_size': float(config.train.step_size)
     }
 
     optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=[train_config['momentum'], train_config['momentum2']], weight_decay = train_config['gamma'])
     if train_config['scheduler_type'] != 'None':
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=4, verbose=True)
+        if train_config['scheduler_type'] == 'StepLR':
+            scheduler = StepLR(optimizer, step_size=train_config['step_size'], gamma=train_config['gamma'])
+        else:
+            scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=4, verbose=True)
         print('Scheduler activated tananana')
-    log_dir = create_log_folder(config.train.log_dir)
+    log_dir = create_log_folder(config.train.log_dir, config.model)
 
     if log_wandb:
 
@@ -81,7 +86,7 @@ def run_training(config_file, log_wandb=True):
     pc_transforms = transforms.Compose(
         [Padding(highest_shape), ToTensor()]
     )
-    full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes, data_augmentation=True)
+    full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes, data_augmentation=False)
 
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
@@ -154,10 +159,10 @@ def run_training(config_file, log_wandb=True):
             if (i + 1) % 100 == 0:
                 print('Epoch {}/{} with iteration {}/{}: CD loss is {}.'.format(epoch, train_config['num_epochs'] *
                                                                                 train_config['batch_size'], i + 1,
-                                                                                batches, ls / len(point_clouds)))
+                                                                                batches, ls))
         #mean_cd_loss_train = (total_cd_loss_train * train_config['batch_size']) / len(train_dataset)
         mean_cd_loss_train = total_cd_loss_train / (len(train_dataset)/train_config['batch_size'])
-        print('\033[32mEpoch {}/{}: reconstructed Chamfer Distance is {} in epoch {}.\033[0m'.format(
+        print('\033[32mEpoch {}/{}: Best reconstructed Chamfer Distance (training) is {} in epoch {}.\033[0m'.format(
             epoch, train_config['num_epochs'], mean_cd_loss_train, best_epoch))
         if log_wandb:
             wandb.log({"training_loss": mean_cd_loss_train, "epoch": epoch})
@@ -234,7 +239,7 @@ def run_training(config_file, log_wandb=True):
                                                                                 train_config['batch_size'], i + 1,
                                                                                 batches, ls))
 
-            mean_cd_loss = total_cd_loss_val / (len(val_dataset)/train_config['batch_size'])
+        mean_cd_loss = total_cd_loss_val / (len(val_dataset)/train_config['batch_size'])
         # calculate the mean cd loss
         # ean_cd_loss = (total_cd_loss_val * train_config['batch_size']) / len(val_dataset)
 
@@ -324,6 +329,8 @@ def infer(data_path, highest_shape, model_path, model_load, permute=True):
     model.load_state_dict(model_dict)
     model.to(device)
     model.eval()
+    reconstructions = []
+    losses = []
     for i, data in enumerate(infer_dataloader):
         point_clouds = data['pc']
         if permute:
@@ -333,7 +340,9 @@ def infer(data_path, highest_shape, model_path, model_load, permute=True):
             recon = model(point_clouds)
         loss = ChamferDistanceL2()
         ls = loss(point_clouds.permute(0, 2, 1), recon.permute(0, 2, 1))
-        print(ls, data['path'])
+        #print(ls, data['path'])
+        reconstructions.append(recon)
+        losses.append(ls)
     return recon, point_clouds, ls
 
 

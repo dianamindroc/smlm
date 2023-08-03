@@ -170,3 +170,46 @@ def print_pc(pc_list, permutation=False):
         z = arr[:, 2]
         ax.scatter(x, y, z)
     plt.show()
+
+
+def _load_point_cloud(file_path):
+    # Assuming the file format is CSV and contains three columns: x, y, z
+    return np.genfromtxt(file_path, delimiter=',')
+
+def _plot_point_cloud(point_clouds, overlay):
+    num_point_clouds = len(point_clouds)
+    rows = int(np.ceil(np.sqrt(num_point_clouds)))
+    cols = int(np.ceil(num_point_clouds / rows))
+    colours = ['blue','orange','green']
+    fig = plt.figure()
+    if overlay:
+        ax = fig.add_subplot(111, projection='3d')
+        for i, pc in enumerate(point_clouds):
+            x, y, z = pc[:, 0], pc[:, 1], pc[:, 2]
+            ax.scatter(x, y, z, zorder = i, c=colours[i])
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+    else:
+        for i, pc in enumerate(point_clouds, 1):
+            ax = fig.add_subplot(cols, rows, i, projection='3d')
+            x, y, z = pc[:, 0], pc[:, 1], pc[:, 2]
+            ax.scatter(x, y, z)
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+
+    plt.tight_layout()
+    plt.show()
+
+def print_pc_from_filearray(point_clouds, overlay=False):
+    if isinstance(point_clouds[0], str):
+        # Load point clouds from file paths
+        point_clouds = [_load_point_cloud(path) for path in point_clouds]
+
+    if all(isinstance(pc, np.ndarray) for pc in point_clouds):
+        # Plot point clouds from arrays
+        _plot_point_cloud(point_clouds, overlay)
+    else:
+        raise ValueError("Invalid input. The function expects a list of file paths or a list of numpy arrays.")
+

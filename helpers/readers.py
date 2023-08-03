@@ -135,3 +135,27 @@ class Reader:
             self.df_xy.to_csv(os.path.join(self.path, self.folder, self.file, '_xyz.csv'), columns=['x', 'y'],
                               sep=';', index=False)
         return self.df_xy
+
+def read_mat_file(file, save = False, path=None):
+    # this is only for the Heydarian dataset
+    import scipy
+    data = scipy.io.loadmat(file)
+    list = []
+    for i, npc in enumerate(data['particles'][0]):
+        npc_to_save = npc[0][0][0]
+        list.append(npc_to_save)
+        if save:
+            df = pd.DataFrame(npc_to_save, columns=['x','y','z'])
+            name = 'npc_' + str(i)
+            if path is None:
+                print('Path was not set. Saving in repository home directory.')
+                path = os.path.join(os.path.abspath(os.curdir), 'NPCs')
+                os.mkdir(path)
+            else:
+                if not os.path.exists(path):
+                    os.mkdir(path)
+            df.to_csv(os.path.join(path,name) + '.csv')
+    return list
+
+
+

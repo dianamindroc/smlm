@@ -1,11 +1,11 @@
 dataset:
-  root_folder: '/home/dim26fa/data/shapenet'
+  root_folder: '/home/dim26fa/data/npc'
   classes: ['all']
-  suffix: '.pts'
+  suffix: '.csv'
 model: 'fold'
 train:
-  lr: 0.0001
-  batch_size: 16
+  lr: 0.01
+  batch_size: 4
   num_workers: 4
   momentum: 0.9
   momentum2: 0.999
@@ -13,8 +13,10 @@ train:
   cd_loss: 'ChamferDistanceL2'
   early_stop_patience: 300
   log_dir: '/home/dim26fa/coding/training'
-  scheduler_type: None
+  scheduler_type: ReduceLR
   gamma: 1e-6
+  step_size: 0.1
+  ignore_zeros: False
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

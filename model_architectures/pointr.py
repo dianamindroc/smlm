@@ -9,7 +9,7 @@ from functools import partial, reduce
 
 import numpy
 from timm.models.layers import DropPath, trunc_normal_
-from extensions.chamfer_dist import ChamferDistanceL1
+#from extensions.chamfer_dist import ChamferDistanceL1
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 from model_architectures.transformer_utils import *
 from model_architectures.utils import fps, jitter_points
