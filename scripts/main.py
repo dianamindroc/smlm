@@ -63,7 +63,8 @@ def run_training(config_file, log_wandb=True):
         'momentum2': config.train.momentum2,
         'scheduler_type': config.train.scheduler_type,
         'gamma': float(config.train.gamma),
-        'step_size': float(config.train.step_size)
+        'step_size': float(config.train.step_size),
+        'data_augmentation': config.train.augmentation
     }
 
     optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=[train_config['momentum'], train_config['momentum2']], weight_decay = train_config['gamma'])
@@ -86,7 +87,7 @@ def run_training(config_file, log_wandb=True):
     pc_transforms = transforms.Compose(
         [Padding(highest_shape), ToTensor()]
     )
-    full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes, data_augmentation=False)
+    full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes, data_augmentation=train_config['data_augmentation'])
 
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
@@ -243,8 +244,12 @@ def run_training(config_file, log_wandb=True):
         # calculate the mean cd loss
         # ean_cd_loss = (total_cd_loss_val * train_config['batch_size']) / len(val_dataset)
 
-        if train_config['scheduler_type'] != 'None':
+        if train_config['scheduler_type'] == 'StepLR':
+            scheduler.step()
+        elif train_config['scheduler_type'] == 'ReduceLROnPlateau':
             scheduler.step(mean_cd_loss)
+        else:
+            break
         if current_lr is not optimizer.param_groups[0]['lr'] and train_config['early_stop_patience'] - no_improvement <= 2:
             # we want to let the training run a few epochs with the new learning rate, therefore we add this if-clause
             no_improvement -= 2

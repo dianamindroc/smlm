@@ -3,6 +3,7 @@ import matplotlib
 import random
 import math
 import pandas as pd
+import numpy as np
 
 class SMLMDnaOrigami:
     def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True):
@@ -11,10 +12,10 @@ class SMLMDnaOrigami:
         self.dna_origami_list = []
         self.dna_origami = []
         if struct_type == 'cube':
-            x, y, z, size = [int(x) for x in input("Enter cube coordinates and size: ").split()]
+            x, y, z, size = [int(x) for x in input("Enter cube coordinates and maximum size (separate by space): ").split()]
             self.model_structure = self.generate_cube(x, y, z, size)
         elif struct_type == 'pyramid':
-            base, height = [int(x) for x in input("Enter pyramid base edge size and height: ").split()]
+            base, height = [int(x) for x in input("Enter pyramid base edge size and height (separate by space): ").split()]
             self.model_structure = self.generate_pyramid(base, height)
         elif struct_type == 'sphere':
             radius, latitude_divisions, longitude_divisions = [int(x) for x in input("Enter sphere radius, "
@@ -23,8 +24,8 @@ class SMLMDnaOrigami:
             self.model_structure = self.generate_sphere(radius, latitude_divisions, longitude_divisions)
         else:
             raise NotImplementedError("Only cube and pyramid supported at the moment :)")
-        self.radius = int(input("What is the radius in which to generate SMLM samples?"))
-        self.number_localizations = int(input("How many localizations to generate around each center?"))
+        self.radius = int(input("What is the maximum radius in which to generate SMLM samples?"))
+        self.number_localizations, self.percentage = [int(x) for x in input("How many localizations to generate around each center and with which variation (separate by space)?").split()]
         self.base_folder = input("Where to save the generated samples?")
         if save_model:
             self.save_model_structure()
@@ -40,6 +41,7 @@ class SMLMDnaOrigami:
         :param size: the size of one edge
         :return: returns a list of tuples containing the coordinates
         """
+        #size = random.choice(range(1, size))
         corners = [(x, y, z),
                    (x+size, y, z),
                    (x+size, y+size, z),
@@ -79,7 +81,7 @@ class SMLMDnaOrigami:
         return coordinates
 
     @staticmethod
-    def generate_points_3d(center, radius, num_points):
+    def generate_points_3d(center, radius, num_points, percentage):
         """"
         Function to generate random points around a center
         :param center: the coordinates of the center
@@ -88,13 +90,22 @@ class SMLMDnaOrigami:
         :return: list of generated points
         """
         points = []
-        for i in range(num_points):
+        #threequarter = int(3/4*len(num_points))
+        variation = percentage
+        new_loc = int(num_points + random.uniform(-variation, variation))
+        for i in range(new_loc):
             r = random.uniform(0, radius)
             theta = random.uniform(0, 2 * math.pi)
             phi = random.uniform(0, math.pi)
+
+            #gaussian_values = np.random.normal(loc=0, scale=1, size=num_points)
+
+            #r *= gaussian_values
+
             x = center[0] + r * math.sin(phi) * math.cos(theta)
             y = center[1] + r * math.sin(phi) * math.sin(theta)
             z = center[2] + r * math.cos(phi)
+
             points.append((x, y, z))
         return points
 
@@ -108,8 +119,9 @@ class SMLMDnaOrigami:
         :param num_localizations: the desired number of localizations to generate
         :return: returns list of generated localizations around the initial coordinates
         """
+        radius = int(random.choice(range(1, self.radius)))
         for corner in self.model_structure:
-            self.dna_origami.append(self.generate_points_3d(corner, self.radius, self.number_localizations))
+            self.dna_origami.append(self.generate_points_3d(corner, radius, self.number_localizations, self.percentage))
             self.dna_origami_list.append(self.dna_origami)
 
     def generate_all_dna_origami_smlm_samples(self):

@@ -154,7 +154,7 @@ def read_mat_file(file, save = False, path=None):
             else:
                 if not os.path.exists(path):
                     os.mkdir(path)
-            df.to_csv(os.path.join(path,name) + '.csv')
+            df.to_csv(os.path.join(path,name) + '.csv', index=False)
     return list
 
 
