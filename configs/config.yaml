@@ -1,21 +1,24 @@
 dataset:
+
   root_folder: '/mnt/c/Users/diana/PhD/data/dna_origami'
   classes: ['all']
   suffix: '.csv'
 model: 'fold'
 train:
   lr: 0.01
-  batch_size: 6
+  batch_size: 32
   num_workers: 4
   momentum: 0.9
   momentum2: 0.999
   num_epochs: 500
   cd_loss: 'ChamferDistanceL2'
   early_stop_patience: 300
-  log_dir: '/mnt/c/Users/diana/PhD/coding/training/'
-  scheduler_type: 'ReduceLR'
-  scheduler_step: 20
-  gamma: 1e-6
+  log_dir: '/home/dim26fa/coding/training'
+  scheduler_type: StepLR
+  gamma: 0.5
+  step_size: 50
+  ignore_zeros: False
+  augmentation: True
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

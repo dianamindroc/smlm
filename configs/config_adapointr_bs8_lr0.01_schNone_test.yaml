@@ -60,15 +60,16 @@ pcn_config:
   coarse_dim: 16384
   fine_dim: 1024
 train:
-  batch_size: 8
+  batch_size: 32
   cd_loss: ChamferDistanceL2
-  early_stop_patience: 300
-  gamma: 1.0e-06
+  early_stop_patience: 20
+  gamma: 0.76
   log_dir: /home/dim26fa/coding/training
-  lr: 0.0001
+  lr:  0.0005
   momentum: 0.9
   momentum2: 0.999
-  num_epochs: 1000
+  num_epochs: 300
   num_workers: 4
-  scheduler_type: null
-  pointr_loss: all
+  scheduler_type: StepLR
+  step_size: 20
+  pointr_loss: dl2

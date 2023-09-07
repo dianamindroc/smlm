@@ -116,7 +116,6 @@ def print_pc(pc_list, permutation=False):
     plt.show()
 
 
-
 def save_plots(epoch, loss, pc_list, path):
     fig = plt.figure()
 
@@ -148,6 +147,7 @@ def save_plots(epoch, loss, pc_list, path):
     filename = f"/epoch_{epoch}_loss_{loss:.4f}.png"
     plt.savefig(full_path + filename)
     plt.close()
+
 
 def print_pc(pc_list, permutation=False):
     import matplotlib.pyplot as plt
@@ -181,13 +181,17 @@ def _plot_point_cloud(point_clouds, overlay):
     num_point_clouds = len(point_clouds)
     rows = int(np.ceil(np.sqrt(num_point_clouds)))
     cols = int(np.ceil(num_point_clouds / rows))
+
     colours = ['blue', 'orange', 'green']
+
     fig = plt.figure()
     if overlay:
         ax = fig.add_subplot(111, projection='3d')
         for i, pc in enumerate(point_clouds):
             x, y, z = pc[:, 0], pc[:, 1], pc[:, 2]
-            ax.scatter(x, y, z, zorder=i, c=colours[i])
+
+            ax.scatter(x, y, z, zorder = i, c=colours[i])
+
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
             ax.set_zlabel('Z')
@@ -214,3 +218,4 @@ def print_pc_from_filearray(point_clouds, overlay=False):
         _plot_point_cloud(point_clouds, overlay)
     else:
         raise ValueError("Invalid input. The function expects a list of file paths or a list of numpy arrays.")
+
