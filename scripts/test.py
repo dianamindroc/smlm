@@ -59,3 +59,6 @@ loss = (torch.mean(dist1)) + (torch.mean(dist2))
 torch.cuda.synchronize()
 print(f"Time: {time.time() - s} seconds")
 print(f"Loss: {loss}")
+
+import glob
+config = glob.glob('/home/squirrel/coding/smlm/configs/config.yaml')

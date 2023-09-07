@@ -11,8 +11,8 @@ def create_log_folder(log_dir):
     log_folder = f"logs_{timestamp}"
 
     # Create the log folder if it doesn't exist
-    if not os.path.exists(os.path.join(log_dir,log_folder)):
-        os.makedirs(log_folder)
+    if not os.path.exists(os.path.join(log_dir, log_folder)):
+        os.makedirs(os.path.join(log_dir, log_folder))
 
-    return log_folder
+    return os.path.join(log_dir, log_folder)
 

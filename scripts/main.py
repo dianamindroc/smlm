@@ -265,7 +265,7 @@ def run_training(config_file, log_wandb=True):
                 if log_wandb:
                     wandb.log({"epoch_stoppage": epoch})
                     wandb.save(filename)
-                    copyfile(filename, wandb.run.dir)
+                    #copyfile(filename, wandb.run.dir)
                 if log_wandb:
                     wandb.finish()
                 model_saved = True
@@ -348,4 +348,3 @@ if __name__ == "__main__":
     #conf = cfg_from_yaml_file('/configs/config.yaml')
     run_training(config)
     print('Done')
-
