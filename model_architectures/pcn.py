@@ -66,7 +66,7 @@ class PCN(nn.Module):
         self.folding_seed = torch.cat([a, b], dim=0).view(1, 2, self.grid_size ** 2).cuda()  # (1, 2, S)
 
     def forward(self, xyz):
-        B, _, N = xyz.shape
+        B, N, _ = xyz.shape
 
         # encoder
         #feature = self.first_conv(xyz.transpose(2, 1))  # (B,  256, N)
@@ -90,3 +90,4 @@ class PCN(nn.Module):
         fine = self.final_conv(feat) + point_feat  # (B, 3, num_fine), fine point cloud
 
         return coarse.contiguous(), fine.transpose(1, 2).contiguous()
+

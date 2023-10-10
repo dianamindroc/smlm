@@ -17,6 +17,7 @@ from model_architectures import pcn, folding_net, pointr, losses
 from model_architectures.transforms import ToTensor, Padding
 from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric
 from dataset.SMLMDataset import Dataset
+from dataset.SimulatorDataset import DNAOrigamiSimulator
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 from model_architectures.pointr import validate
 from chamferdist import ChamferDistance
@@ -119,12 +120,23 @@ def run_training(config_file, log_wandb=True):
         model.train()
         total_cd_loss_train = 0
         for i, data in enumerate(train_dataloader):
-            point_clouds = data['pc']
-            if config.model == 'fold' or config.model == 'pcn':
+            point_clouds = data
+            if config.model == 'fold':
                 point_clouds = point_clouds.permute(0, 2, 1)
-            point_clouds = point_clouds.to(device)
+                point_clouds = point_clouds.to(device)
+                recons = model(point_clouds)
+            if config.model == 'pcn':
+                gt = point_clouds[0].permute(0, 2, 1)
+                gt = gt.to(device)
+                pc_partial = point_clouds[2].permute(0, 2, 1)
+                pc_partial = pc_partial.to(device)
+                pc_complete = point_clouds[1].permute(0, 2, 1)
+                pc_complete = pc_complete.to(device)
+                recons = model(pc_partial)
+                #point_clouds = point_clouds.permute(0, 2, 1)
+
             #print('This are the pointcloud shape', point_clouds.shape)
-            recons = model(point_clouds)
+
             #print('This is the recon shape', recons[0].shape)
             if config.model == 'pcn':
                 if train_step < 10000:
@@ -135,8 +147,8 @@ def run_training(config_file, log_wandb=True):
                     alpha = 0.5
                 else:
                     alpha = 1.0
-                loss1 = losses.cd_loss_l1(recons[0], point_clouds)
-                loss2 = losses.cd_loss_l2(recons[1], point_clouds)
+                loss1 = losses.cd_loss_l1(recons[0], pc_partial)
+                loss2 = losses.cd_loss_l2(recons[1], pc_complete)
                 ls = loss1 + alpha * loss2
             elif config.model == 'fold':
                 ls = train_config['cd_loss'](point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))
@@ -175,12 +187,20 @@ def run_training(config_file, log_wandb=True):
             for data in val_dataloader:
                 if sample_to_save_path is None:
                     sample_to_save_path = data['path'][0]
-                point_clouds = data['pc']
-                if config.model == 'fold' or config.model == 'pcn':
+                point_clouds = data
+                if config.model == 'fold':
                     point_clouds = point_clouds.permute(0, 2, 1)
-                point_clouds = point_clouds.to(device)
-                #print('This is val point_clouds shape', point_clouds.shape)
-                recons = model(point_clouds)
+                    point_clouds = point_clouds.to(device)
+                    recons = model(point_clouds)
+                if config.model == 'pcn':
+                    gt = point_clouds[0].permute(0, 2, 1)
+                    gt = gt.to(device)
+                    pc_partial = point_clouds[2].permute(0, 2, 1)
+                    pc_partial = pc_partial.to(device)
+                    pc_complete = point_clouds[1].permute(0, 2, 1)
+                    pc_complete = pc_complete.to(device)
+                    recons = model(pc_partial)
+
                 #print('This is val reconds0 shape', recons[0].shape)
                 if config.model == 'pcn':
                     if train_step < 10000:
@@ -191,8 +211,8 @@ def run_training(config_file, log_wandb=True):
                         alpha = 0.5
                     else:
                         alpha = 1.0
-                    loss1 = losses.cd_loss_l1(recons[0], point_clouds)
-                    loss2 = losses.cd_loss_l2(recons[1], point_clouds)
+                    loss1 = losses.cd_loss_l1(recons[0], pc_partial)
+                    loss2 = losses.cd_loss_l2(recons[1], pc_complete)
                     ls = loss1 + alpha * loss2
                 elif config.model == 'fold':
                     ls = train_config['cd_loss'](point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))

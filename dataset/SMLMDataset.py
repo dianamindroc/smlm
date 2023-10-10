@@ -74,4 +74,3 @@ class Dataset(DS):
             sample = self.transform(sample)
 
         return sample
-

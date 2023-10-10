@@ -3,6 +3,7 @@ import matplotlib
 import random
 import math
 import pandas as pd
+import numpy as np
 
 class SMLMDnaOrigami:
     def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True):
@@ -92,6 +93,11 @@ class SMLMDnaOrigami:
             r = random.uniform(0, radius)
             theta = random.uniform(0, 2 * math.pi)
             phi = random.uniform(0, math.pi)
+
+            gaussian_values = np.random.normal(loc=0, scale=1, size=num_points)
+
+            r *= gaussian_values
+
             x = center[0] + r * math.sin(phi) * math.cos(theta)
             y = center[1] + r * math.sin(phi) * math.sin(theta)
             z = center[2] + r * math.cos(phi)
