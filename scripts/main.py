@@ -17,10 +17,12 @@ from model_architectures import pcn, folding_net, pointr, losses
 from model_architectures.transforms import ToTensor, Padding
 from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric
 from dataset.SMLMDataset import Dataset
+from dataset.SMLMSimulator import DNAOrigamiSimulator
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 from model_architectures.pointr import validate
 from chamferdist import ChamferDistance
-
+import warnings
+warnings.filterwarnings("ignore")
 #from chamfer_distance.chamfer_distance import ChamferDistance
 
 
@@ -31,6 +33,7 @@ from chamferdist import ChamferDistance
 
 
 wandb.login()
+config_file = '/home/squirrel/coding/smlm/configs/config.yaml'
 #cfg = cfg_from_yaml_file('configs/config.yaml')
 
 
@@ -63,9 +66,21 @@ def run_training(config_file, log_wandb=True):
         'momentum2': config.train.momentum2,
         'scheduler_type': config.train.scheduler_type,
         'gamma': float(config.train.gamma),
-        'step_size': float(config.train.step_size),
-        'data_augmentation': config.train.augmentation
+        'step_size': float(config.train.step_size)
     }
+
+    # Dye properties dictionary
+    dye_properties_dict = {
+        'Alexa_Fluor_647': {'density_range': (10, 50), 'blinking_times_range': (10, 50), 'intensity_range': (500, 5000),
+                            'precision_range': (0.5, 2.0)},
+        # ... (other dyes)
+    }
+
+    # Choose a specific dye
+    selected_dye = 'Alexa_Fluor_647'
+    selected_dye_properties = dye_properties_dict[selected_dye]
+    # Define structure parameters and noise conditions
+
 
     optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=[train_config['momentum'], train_config['momentum2']], weight_decay = train_config['gamma'])
     if train_config['scheduler_type'] != 'None':
@@ -87,7 +102,9 @@ def run_training(config_file, log_wandb=True):
     pc_transforms = transforms.Compose(
         [Padding(highest_shape), ToTensor()]
     )
-    full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes, data_augmentation=train_config['data_augmentation'])
+    full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes, data_augmentation=False)
+    full_dataset = DNAOrigamiSimulator(5000, 'box', selected_dye_properties, augment=True, remove_corners=True,
+                                       transform=pc_transforms)
 
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
@@ -109,8 +126,9 @@ def run_training(config_file, log_wandb=True):
     model_saved = False
     train_step = 0
     sample_to_save_path = None
+    index = 0
 
-    print("The shape of the input tensor is", next(iter(train_dataloader))['pc'].shape)
+    print("The shape of the input tensor is", next(iter(train_dataloader)).shape)
 
     # Start training and evaluation
     print('\033[31mBegin Training...\033[0m')
@@ -120,12 +138,29 @@ def run_training(config_file, log_wandb=True):
         model.train()
         total_cd_loss_train = 0
         for i, data in enumerate(train_dataloader):
-            point_clouds = data['pc']
-            if config.model == 'fold' or config.model == 'pcn':
+            point_clouds = data
+            if config.model == 'fold':
                 point_clouds = point_clouds.permute(0, 2, 1)
-            point_clouds = point_clouds.to(device)
+                point_clouds = point_clouds.to(device)
+                recons = model(point_clouds)
+            if config.model == 'pcn':
+                gt = point_clouds[0].permute(0, 2, 1)
+                gt = gt.to(device)
+                partial = point_clouds[2].permute(1, 0, 2, 3)
+                pc_partial = partial[0].permute(0, 2, 1)
+                #pc_partial = point_clouds[2][0].permute(0, 2, 1)
+                pc_partial = pc_partial.to(device)
+                complete = point_clouds[1].permute(1, 0, 2, 3)
+                pc_complete = complete[0].permute(0, 2, 1)
+                #pc_complete = point_clouds[1][0].permute(0, 2, 1)
+                pc_complete = pc_complete.to(device)
+                mask = complete[1].permute(0, 2, 1)
+                mask = mask.to(device)
+                recons = model(pc_partial)
+                #point_clouds = point_clouds.permute(0, 2, 1)
+
             #print('This are the pointcloud shape', point_clouds.shape)
-            recons = model(point_clouds)
+
             #print('This is the recon shape', recons[0].shape)
             if config.model == 'pcn':
                 if train_step < 10000:
@@ -136,9 +171,13 @@ def run_training(config_file, log_wandb=True):
                     alpha = 0.5
                 else:
                     alpha = 1.0
-                loss1 = losses.cd_loss_l1(recons[0], point_clouds)
-                loss2 = losses.cd_loss_l2(recons[1], point_clouds)
-                ls = loss1 + alpha * loss2
+                loss1 = losses.cd_loss_l1(recons[0], pc_partial)
+                masked_loss1 = loss1 * mask
+                total_loss1 = masked_loss1.sum() / mask.sum()
+                loss2 = losses.cd_loss_l2(recons[1], pc_complete)
+                masked_loss2 = loss2 * mask
+                total_loss2 = masked_loss2.sum() / mask.sum()
+                ls = total_loss1 + alpha * total_loss2
             elif config.model == 'fold':
                 ls = train_config['cd_loss'](point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))
             elif config.model == 'pointr':
@@ -174,14 +213,28 @@ def run_training(config_file, log_wandb=True):
         total_cd_loss_val = 0
         with torch.no_grad():
             for data in val_dataloader:
-                if sample_to_save_path is None:
-                    sample_to_save_path = data['path'][0]
-                point_clouds = data['pc']
-                if config.model == 'fold' or config.model == 'pcn':
+                #if sample_to_save_path is None:
+                #    sample_to_save_path = data['path'][0]
+                point_clouds = data
+                if config.model == 'fold':
                     point_clouds = point_clouds.permute(0, 2, 1)
-                point_clouds = point_clouds.to(device)
-                #print('This is val point_clouds shape', point_clouds.shape)
-                recons = model(point_clouds)
+                    point_clouds = point_clouds.to(device)
+                    recons = model(point_clouds)
+                if config.model == 'pcn':
+                    gt = point_clouds[0].permute(0, 2, 1)
+                    gt = gt.to(device)
+                    partial = point_clouds[2].permute(1, 0, 2, 3)
+                    pc_partial = partial[0].permute(0, 2, 1)
+                    # pc_partial = point_clouds[2][0].permute(0, 2, 1)
+                    pc_partial = pc_partial.to(device)
+                    complete = point_clouds[1].permute(1, 0, 2, 3)
+                    pc_complete = complete[0].permute(0, 2, 1)
+                    # pc_complete = point_clouds[1][0].permute(0, 2, 1)
+                    pc_complete = pc_complete.to(device)
+                    mask = complete[1].permute(0, 2, 1)
+                    mask = mask.to(device)
+                    recons = model(pc_partial)
+
                 #print('This is val reconds0 shape', recons[0].shape)
                 if config.model == 'pcn':
                     if train_step < 10000:
@@ -192,9 +245,13 @@ def run_training(config_file, log_wandb=True):
                         alpha = 0.5
                     else:
                         alpha = 1.0
-                    loss1 = losses.cd_loss_l1(recons[0], point_clouds)
-                    loss2 = losses.cd_loss_l2(recons[1], point_clouds)
-                    ls = loss1 + alpha * loss2
+                    loss1 = losses.cd_loss_l1(recons[0], pc_partial)
+                    masked_loss1 = loss1 * mask
+                    total_loss1 = masked_loss1.sum() / mask.sum()
+                    loss2 = losses.cd_loss_l2(recons[1], pc_complete)
+                    masked_loss2 = loss2 * mask
+                    total_loss2 = masked_loss2.sum() / mask.sum()
+                    ls = total_loss1 + alpha * total_loss2
                 elif config.model == 'fold':
                     ls = train_config['cd_loss'](point_clouds.permute(0, 2, 1), recons.permute(0, 2, 1))
                 elif config.model == 'pointr':
@@ -227,14 +284,14 @@ def run_training(config_file, log_wandb=True):
                     if log_wandb:
                         wandb.log({'val_step_loss ls': ls, 'sl1': sl1, 'sl2': sl2, 'dl1': dl1, 'dl2': dl2})
 
-                if sample_to_save_path in data['path']:
-                    index = data['path'].index(sample_to_save_path)
-                    if config.model == 'pointr':
-                        sample_to_save = [data['pc'][index], recons[-1][index]]
-                    elif config.model == 'pcn':
-                        sample_to_save = [data['pc'][index], recons[0][index]]
-                    else:
-                        sample_to_save = [data['pc'][index], recons.permute(0, 2, 1)[index]]
+                #if sample_to_save_path in data['path']:
+                index = 0
+                if config.model == 'pointr':
+                    sample_to_save = [data['pc'][index], recons[-1][index]]
+                elif config.model == 'pcn':
+                    sample_to_save = [gt, pc_partial, pc_complete, recons[0][index], recons[1][index]]
+                else:
+                    sample_to_save = [data['pc'][index], recons.permute(0, 2, 1)[index]]
                 if (i + 1) % 100 == 0:
                     print('Epoch {}/{} with iteration {}/{}: Val CD loss is {:.2f}.'.format(epoch, train_config['num_epochs'] *
                                                                                 train_config['batch_size'], i + 1,
@@ -244,12 +301,8 @@ def run_training(config_file, log_wandb=True):
         # calculate the mean cd loss
         # ean_cd_loss = (total_cd_loss_val * train_config['batch_size']) / len(val_dataset)
 
-        if train_config['scheduler_type'] == 'StepLR':
-            scheduler.step()
-        elif train_config['scheduler_type'] == 'ReduceLROnPlateau':
+        if train_config['scheduler_type'] != 'None':
             scheduler.step(mean_cd_loss)
-        else:
-            break
         if current_lr is not optimizer.param_groups[0]['lr'] and train_config['early_stop_patience'] - no_improvement <= 2:
             # we want to let the training run a few epochs with the new learning rate, therefore we add this if-clause
             no_improvement -= 2
@@ -275,7 +328,7 @@ def run_training(config_file, log_wandb=True):
                 if log_wandb:
                     wandb.log({"epoch_stoppage": epoch})
                     wandb.save(filename)
-                    #copyfile(filename, wandb.run.dir)
+                    copyfile(filename, wandb.run.dir)
                 if log_wandb:
                     wandb.finish()
                 model_saved = True
@@ -362,3 +415,4 @@ if __name__ == "__main__":
     #conf = cfg_from_yaml_file('/configs/config.yaml')
     run_training(config)
     print('Done')
+

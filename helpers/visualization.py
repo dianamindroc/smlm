@@ -117,24 +117,28 @@ def print_pc(pc_list, permutation=False):
 
 
 def save_plots(epoch, loss, pc_list, path):
-    fig = plt.figure()
-
+    # fig = plt.figure()
+    #
+    detached = []
     for i, pc in enumerate(pc_list):
         if torch.is_tensor(pc):
             if pc.ndim == 3:
                 pc = pc.permute(0, 2, 1)
                 arr = pc.detach().cpu().numpy()
                 arr = arr[0]
+                detached.append(arr)
             else:
                 arr = pc.detach().cpu().numpy()
+                detached.append(arr)
         else:
             arr = pc
-        ax = fig.add_subplot(1, 2, i + 1, projection='3d')
-        x = arr[:, 0]
-        y = arr[:, 1]
-        z = arr[:, 2]
-        ax.scatter(x, y, z)
-
+            detached.append(arr)
+    #     ax = fig.add_subplot(1, 2, i + 1, projection='3d')
+    #     x = arr[:, 0]
+    #     y = arr[:, 1]
+    #     z = arr[:, 2]
+    #     ax.scatter(x, y, z)
+    print_pc_from_filearray(detached)
     # Set the title with epoch number and loss
     plt.suptitle(f"Epoch: {epoch}, Loss: {loss}")
 

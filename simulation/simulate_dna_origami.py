@@ -87,6 +87,7 @@ class SMLMDnaOrigami:
         :param center: the coordinates of the center
         :param radius: the radius in which the points should be generated. The points will be generated inside the radius as well, not only at the radius
         :param num_points: the number of points to generate
+        :param percentage: percentage of variation desired in the data
         :return: list of generated points
         """
         points = []
