@@ -34,7 +34,11 @@ smlm
 │   │   simulate_data.py
 └──────  
 ```
-
+#### Tutorial
+We created tutorial notebooks for an easy understanding of the project.
+* Introduction and data simulation  <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Intro_and_data_simulation.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
 #### Simulations
 
 To use the simulation code, the original java code of the SureSim simulator from [Kuner Lab](https://github.com/tkunerlab/JavaUmsetzungSTORMSimulation) needs to be built. 
@@ -44,8 +48,7 @@ To run the simulations from the command line, navigate to the scripts folder and
 `python run_simulation.py --config config.yaml`
 
 Default number of simulated samples is 15. The default microscopy technique used for simulation parameters is dSTORM. Epitope density, recorded frames and detection efficiency are the simulation parameters that are randomly varied in specific ranges. To modify these ranges, navigate to `simulate_data.py` in `simulation` folder.
-
-#### Containerized application
+#### Containerized simulation application
 
 Prerequisites: [Singularity](https://sylabs.io/guides/3.0/user-guide/quick_start.html) installed on the host machine.
 
