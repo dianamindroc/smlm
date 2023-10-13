@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore")
 
 
 wandb.login()
-config_file = '/home/squirrel/coding/smlm/configs/config.yaml'
+#config_file = '/home/dim26fa/coding/smlm/configs/config.yaml'
 #cfg = cfg_from_yaml_file('configs/config.yaml')
 
 
@@ -52,7 +52,9 @@ def run_training(config_file, log_wandb=True):
     root_folder = config.dataset.root_folder
     classes = config.dataset.classes
     suffix = config.dataset.suffix
-    highest_shape = get_highest_shape(root_folder, classes)
+    #highest_shape = get_highest_shape(root_folder, classes)
+    highest_shape = config.dataset.highest_shape
+
 
     # Set training params
     train_config = {
@@ -102,7 +104,7 @@ def run_training(config_file, log_wandb=True):
     pc_transforms = transforms.Compose(
         [Padding(highest_shape), ToTensor()]
     )
-    full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes, data_augmentation=False)
+    #full_dataset = Dataset(root_folder=root_folder, suffix=suffix, transform=pc_transforms, classes_to_use=classes, data_augmentation=False)
     full_dataset = DNAOrigamiSimulator(5000, 'box', selected_dye_properties, augment=True, remove_corners=True,
                                        transform=pc_transforms)
 
@@ -128,7 +130,7 @@ def run_training(config_file, log_wandb=True):
     sample_to_save_path = None
     index = 0
 
-    print("The shape of the input tensor is", next(iter(train_dataloader)).shape)
+    #print("The shape of the input tensor is", next(iter(train_dataloader)).shape)
 
     # Start training and evaluation
     print('\033[31mBegin Training...\033[0m')
@@ -156,7 +158,7 @@ def run_training(config_file, log_wandb=True):
                 pc_complete = pc_complete.to(device)
                 mask = complete[1].permute(0, 2, 1)
                 mask = mask.to(device)
-                recons = model(pc_partial)
+                recons = model(pc_complete)
                 #point_clouds = point_clouds.permute(0, 2, 1)
 
             #print('This are the pointcloud shape', point_clouds.shape)
@@ -171,7 +173,7 @@ def run_training(config_file, log_wandb=True):
                     alpha = 0.5
                 else:
                     alpha = 1.0
-                loss1 = losses.cd_loss_l1(recons[0], pc_partial)
+                loss1 = losses.cd_loss_l1(recons[0], pc_complete)
                 masked_loss1 = loss1 * mask
                 total_loss1 = masked_loss1.sum() / mask.sum()
                 loss2 = losses.cd_loss_l2(recons[1], pc_complete)
@@ -233,7 +235,7 @@ def run_training(config_file, log_wandb=True):
                     pc_complete = pc_complete.to(device)
                     mask = complete[1].permute(0, 2, 1)
                     mask = mask.to(device)
-                    recons = model(pc_partial)
+                    recons = model(pc_complete)
 
                 #print('This is val reconds0 shape', recons[0].shape)
                 if config.model == 'pcn':
@@ -245,7 +247,7 @@ def run_training(config_file, log_wandb=True):
                         alpha = 0.5
                     else:
                         alpha = 1.0
-                    loss1 = losses.cd_loss_l1(recons[0], pc_partial)
+                    loss1 = losses.cd_loss_l1(recons[0], pc_complete)
                     masked_loss1 = loss1 * mask
                     total_loss1 = masked_loss1.sum() / mask.sum()
                     loss2 = losses.cd_loss_l2(recons[1], pc_complete)
@@ -411,7 +413,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Point Cloud reconstruction')
     parser.add_argument('--config', type=str, help='Path to the configuration file', required=True)
     args = parser.parse_args()
-    config = cfg_from_yaml_file(args.config)
+    config = args.config
     #conf = cfg_from_yaml_file('/configs/config.yaml')
     run_training(config)
     print('Done')
