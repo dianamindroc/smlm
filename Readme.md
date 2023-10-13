@@ -21,6 +21,8 @@ smlm
 └───helpers
 │   │   readers.py
 │   │   visualization.py
+└───model_architectures
+│   │ 
 └───notebooks
 │   │   visualization.ipynb
 │   │   smlm_preprocessing.ipynb 
@@ -29,9 +31,13 @@ smlm
 └───scripts
 │   │   run_simulation.py
 │   │   config.yaml
+│   │   main.py
+│   │   run_preprocessing.py
 └───simulation
 │   │   simulator.py
 │   │   simulate_data.py
+└───tutorial
+│   │   Intro_and_data_simulation.ipynb
 └──────  
 ```
 #### Tutorial
