@@ -2,4 +2,4 @@
   
 jar_path: '/home/dim26fa/coding/JavaUmsetzungSTORMSimulation/STORMVis/target/suresim_cli.jar-jar-with-dependencies.jar'
   
-models: '/home/dim26fa/data/imod_models/mitochondria'
+models: '/home/dim26fa/data/imod_shapes/'

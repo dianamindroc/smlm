@@ -57,8 +57,8 @@ def pad_tensor(current_shape, target_shape):
 
 
 def get_highest_shape(root_folder, classes):
-    #csv_file = os.path.join(os.path.dirname(os.path.abspath(os.curdir)), 'resources', 'highest_shape.csv')
-    csv_file = os.path.join('/home/squirrel/coding/smlm', 'resources', 'highest_shape.csv')
+    csv_file = os.path.join(os.path.dirname(os.path.abspath(os.curdir)),'resources', 'highest_shape.csv')
+    #csv_file = os.path.join('/home/squirrel/coding/smlm', 'resources', 'highest_shape.csv')
     dataset_name = os.path.basename(root_folder)
     if os.path.exists(csv_file):
         df = pd.read_csv(csv_file)
@@ -72,7 +72,7 @@ def get_highest_shape(root_folder, classes):
 
     highest = 0
     if 'all' in classes:
-        cls = os.listdir(root_folder)
+        cls = [elem for elem in os.listdir(root_folder) if os.path.isdir(os.path.join(root_folder, elem))]
     else:
         cls = classes
     for cl in cls:

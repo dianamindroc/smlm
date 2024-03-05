@@ -117,7 +117,7 @@ def print_pc(pc_list, permutation=False):
     plt.show()
 
 
-def save_plots(epoch, loss, pc_list, path):
+def save_plots(epoch, loss, pc_list, path, save=True):
     # fig = plt.figure()
     #
     detached = []
@@ -139,7 +139,7 @@ def save_plots(epoch, loss, pc_list, path):
     #     y = arr[:, 1]
     #     z = arr[:, 2]
     #     ax.scatter(x, y, z)
-    print_pc_from_filearray(detached, path=path, epoch=epoch, loss=loss)
+    print_pc_from_filearray(detached, path=path, epoch=epoch, loss=loss, save=save)
     # Set the title with epoch number and loss
 
 
@@ -172,7 +172,7 @@ def _load_point_cloud(file_path):
     return np.genfromtxt(file_path, delimiter=',')
 
 
-def _plot_point_cloud(point_clouds, overlay, path, epoch, loss):
+def _plot_point_cloud(point_clouds, overlay, path, epoch, loss, save=False):
     num_point_clouds = len(point_clouds)
     rows = int(np.ceil(np.sqrt(num_point_clouds)))
     cols = int(np.ceil(num_point_clouds / rows))
@@ -204,25 +204,26 @@ def _plot_point_cloud(point_clouds, overlay, path, epoch, loss):
 
     plt.suptitle(f"Epoch: {epoch}, Loss: {loss}")
 
-    # Create a directory to save the plots if it doesn't exist
-    full_path = path + "/plots"
-    if not os.path.exists(full_path):
-        os.makedirs(full_path)
+    if save:
+        # Create a directory to save the plots if it doesn't exist
+        full_path = path + "/plots"
+        if not os.path.exists(full_path):
+            os.makedirs(full_path)
 
-    # Save the plot as a PNG with unique filename based on epoch and loss
-    filename = f"/epoch_{epoch}_loss_{loss:.4f}.png"
-    plt.savefig(full_path + filename)
-    plt.close()
+        # Save the plot as a PNG with unique filename based on epoch and loss
+        filename = f"/epoch_{epoch}_loss_{loss:.4f}.png"
+        plt.savefig(full_path + filename)
+        plt.close()
 
 
-def print_pc_from_filearray(point_clouds, path, epoch, loss, overlay=False):
+def print_pc_from_filearray(point_clouds, path=None, epoch=0, loss=0, overlay=False, save=False):
     if isinstance(point_clouds[0], str):
         # Load point clouds from file paths
         point_clouds = [_load_point_cloud(path) for path in point_clouds]
 
     if all(isinstance(pc, np.ndarray) for pc in point_clouds):
         # Plot point clouds from arrays
-        _plot_point_cloud(point_clouds, overlay, path=path, epoch=epoch, loss=loss)
+        _plot_point_cloud(point_clouds, overlay, path=path, epoch=epoch, loss=loss, save=save)
     else:
         raise ValueError("Invalid input. The function expects a list of file paths or a list of numpy arrays.")
 

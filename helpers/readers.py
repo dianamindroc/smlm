@@ -157,5 +157,44 @@ def read_mat_file(file, save = False, path=None):
             df.to_csv(os.path.join(path,name) + '.csv', index=False)
     return list
 
+class ReaderIMODfiles:
+    """
+    Class for extracting files containing point clouds generated with IMOD.
+    """
+    def __init__(self, path_folder : str, suffix : str = 'Localizations.txt'):
+        self.suffix = suffix
+        if 'train' in os.listdir(path_folder):
+            self.path_folder = path_folder
+            self.path_folder1 = os.path.join(path_folder, 'train')
+            self.read(self.path_folder1)
+            self.path_folder2 = os.path.join(path_folder, 'test')
+            self.read(self.path_folder2)
+        else:
+            self.path_folder = path_folder
+            self.read(self.path_folder)
+
+    def read(self, path):
+        for item in os.listdir(path):
+            full_path = os.path.join(path, item)
+            if os.path.isdir(full_path):
+                self._process_subfolders(full_path)
+
+
+    def _process_subfolders(self, folder_path):
+        for file in os.listdir(folder_path):
+            if file.endswith(self.suffix):
+                df = pd.read_csv(os.path.join(folder_path,file), sep=' ')
+                df.rename(columns={
+                    'Pos_x': 'x',
+                    'Pos_y': 'y',
+                    'Pos_z': 'z'
+                    # Add more columns as needed
+                }, inplace=True)
+                name = folder_path.split('/')[-1] + '.csv'
+                save_path = os.path.join(self.path_folder, name)
+                df.to_csv(save_path, index=False)
+
+
+
 
 

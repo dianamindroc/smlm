@@ -1,6 +1,6 @@
 dataset:
 
-  root_folder: '/home/dim26fa/data/simulated_dna_origami'
+  root_folder: '/home/dim26fa/data/simulated_dna_origami/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
@@ -8,15 +8,15 @@ model: 'pcn'
 train:
   lr: 0.001
   batch_size: 64
-  num_workers: 0
+  num_workers: 6
   momentum: 0.9
   momentum2: 0.999
   num_epochs: 500
-  cd_loss: 'ChamferDistanceL2'
+  cd_loss: 'ChamferDistanceL1'
   early_stop_patience: 30
   log_dir: '/home/dim26fa/coding/training'
-  scheduler_type: reduce
-  gamma: 0.5
+  scheduler_type: None
+  gamma: 0.0001 # for other than stepLR use smaller values e.g. 0.0001
   step_size: 50
   ignore_zeros: False
   augmentation: True

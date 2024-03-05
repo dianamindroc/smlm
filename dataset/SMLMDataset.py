@@ -8,26 +8,76 @@ from helpers.data import get_label, read_pts_file, assign_labels
 
 
 class Dataset(DS):
-    def __init__(self, root_folder, suffix, transform=None, classes_to_use=None, data_augmentation=False):
+    def __init__(self, root_folder,
+                       suffix,
+                       transform=None,
+                       classes_to_use=None,
+                       data_augmentation=False,
+                       remove_part_prob=0.4,
+                       remove_outliers=False):
+        """
+        Initialize the dataset class.
+        :param root_folder: path to main folder containing data
+        :param suffix: suffix of the files to be added to the dataset
+        :param transform: pre-defined transformations to be applied to the point cloud e.g. ToTensor or Padding
+        :param classes_to_use: if there are multiple classes in the root_folder, by defining the parameter we can
+        choose which ones to use. Use 'all' to get all the classes from root_folder.
+        :param data_augmentation: boolean to decide if augmentation should be applied or not
+        :param remove_part_prob: defines the probability of removing a point from the point cloud. If 0, no points are removed.
+        """
         super().__init__()
         if classes_to_use is None:
             classes_to_use = ['cube', 'pyramid']
         self.root_folder = root_folder
         self.suffix = suffix
         self.data_augmentation = data_augmentation
+        self.remove_outliers = remove_outliers
         if 'all' in classes_to_use:
-            self.classes_to_use = os.listdir(root_folder)
+            self.classes_to_use = [elem for elem in os.listdir(root_folder) if os.path.isdir(os.path.join(root_folder, elem))]
         else:
             self.classes_to_use = classes_to_use
         self.transform = transform
         #if self.suffix == '.pts':
         self.labels = assign_labels(root_folder)
+        self.p_remove_point = remove_part_prob
         # Find all files in the root folder with the given suffix
         self.filepaths = []
         for subdir, dirs, files in os.walk(self.root_folder):
             for file in files:
                 if file.endswith(self.suffix) and subdir.split('/')[-1] in self.classes_to_use:
                     self.filepaths.append(os.path.join(subdir, file))
+
+    def _augment_data(self, point_cloud):
+        # Define a random rotation matrix
+        theta = np.random.uniform(0, 2 * np.pi)  # Rotation angle
+        rotation_matrix = np.array([
+            [np.cos(theta), -np.sin(theta), 0],
+            [np.sin(theta), np.cos(theta), 0],
+            [0, 0, 1]
+        ])
+
+        # Apply the rotation to each point in the point cloud
+        augmented_point_cloud = np.dot(point_cloud[:, :3], rotation_matrix.T)
+        #augmented_point_cloud = np.column_stack((augmented_point_cloud, point_cloud[:, 3:]))  # Append the intensity back
+        pc = augmented_point_cloud
+
+        partial_pc = pc
+        if self.p_remove_point > 0:
+            num_points = len(pc)
+            remove_points_mask = np.random.choice([True, False], num_points, p=[self.p_remove_point , 1 - self.p_remove_point ])
+            partial_pc = pc[~remove_points_mask]
+
+        return pc, partial_pc
+
+    def _remove_outliers(self, point_cloud):
+        import hdbscan
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=50, min_samples=None, algorithm='best', alpha=0.7,metric='euclidean')
+        cluster_labels = clusterer.fit_predict(point_cloud)
+        from collections import Counter
+        label_counts = Counter(cluster_labels)
+        label_with_fewer_points = min(label_counts, key=label_counts.get)
+        filtered_point_cloud = point_cloud[cluster_labels != label_with_fewer_points]
+        return filtered_point_cloud
 
     def __len__(self):
         return len(self.filepaths)
@@ -41,6 +91,7 @@ class Dataset(DS):
             arr = read_pts_file(filepath)
         else:
             raise NotImplementedError("This data type is not implemented at the moment.")
+        partial_arr = None
         #target = (self.highest_shape, arr.shape[-1])
         #padding = [(0, target[0] - arr.shape[0]), (0, 0)]
         #padded_arr = np.pad(arr, padding)
@@ -60,13 +111,20 @@ class Dataset(DS):
         else:
             raise NotImplementedError("This label is not included in the current dataset.")
 
+
         if self.data_augmentation:
-            theta = np.random.uniform(0, np.pi * 2)
-            rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-            arr[:, [0, 2]] = arr[:, [0, 2]].dot(rotation_matrix)  # random rotation
-            arr += np.random.normal(0, 0.02, size=arr.shape)  # random jitter
+            #theta = np.random.uniform(0, np.pi * 2)
+            #rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+            #arr[:, [0, 2]] = arr[:, [0, 2]].dot(rotation_matrix)  # random rotation
+            #arr += np.random.normal(0, 0.02, size=arr.shape)  # random jitter
+            arr, partial_arr = self._augment_data(arr)
+
+        if self.remove_outliers:
+            arr = self._remove_outliers(arr)
+            partial_arr = self._remove_outliers(partial_arr)
 
         sample = {'pc': arr,
+                  'partial_pc': partial_arr,
                   'label': np.array(label),
                   'path': filepath}
 

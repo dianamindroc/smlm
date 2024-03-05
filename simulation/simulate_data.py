@@ -51,33 +51,51 @@ technique = {
 }
 
 
-def simulate(config, samples, tech, split):
+def simulate(config, samples, tech, frames, split):
     detection_efficiency = np.round(np.linspace(40, 80, 20), 2)
     epitope_density = np.round(np.linspace(0.01, 0.2, 100), 2)
-    recorded_frames = np.round(np.linspace(1000, 4000, 20))
+    if type(frames) == str:
+        recorded_frames = np.round(np.linspace(100, 4000, 20))
+    else:
+        recorded_frames = frames
 
     for file in os.listdir(config['models']):
         if file.endswith('.wimp'):
             model = file
-    for n in range(0, samples):
-        parameters = technique[tech]
-        parameters['detectionEfficiency'] = choice(detection_efficiency)
-        parameters['epitopeDensity'] = choice(epitope_density)
-        parameters['recordedFrames'] = choice(recorded_frames)
-        simulator = Simulator(config['jar_path'], config['models'], model, parameters)
-        name = 'sample_' + str(n)
-        simulator.simulate(output=name)
-        print('Sample ' + str(n) + ' done.')
-    if split:
-        train_path = os.path.join(config['models'], 'train')
-        test_path = os.path.join(config['models'], 'test')
-        if not os.path.exists(train_path):
-            os.mkdir(train_path)
-        if not os.path.exists(test_path):
-            os.mkdir(test_path)
-        train = 80/100 * samples
-        for n in range(0, int(train)):
-            shutil.move(os.path.join(config['models'], 'sample_'+str(n)), train_path)
-        for m in range(int(train), samples):
-            shutil.move(os.path.join(config['models'], 'sample_'+str(m)), test_path)
+            output_path = os.path.join(config['models'], file.split('.')[0])
+            if not os.path.exists(output_path):
+                os.mkdir(output_path)
+                print('Current folder is ' + output_path)
+                shutil.move(os.path.join(config['models'] + file), output_path)
+            else:
+                print('Folder exists: ' + output_path)
+            for n in range(0, samples):
+                parameters = technique[tech]
+                parameters['detectionEfficiency'] = choice(detection_efficiency)
+                parameters['epitopeDensity'] = choice(epitope_density)
+                if type(frames) == str:
+                    parameters['recordedFrames'] = choice(recorded_frames)
+                else:
+                    parameters['recordedFrames'] = frames
+                if not os.path.exists(output_path):
+                    print('Folder does not exist. Aborting.')
+                else:
+                    simulator = Simulator(config['jar_path'], output_path, model, parameters)
+                    name = 'sample_' + str(n)
+                    simulator.simulate(output=os.path.join(output_path, name))
+                    print('Sample ' + str(n) + ' done.')
+            if split:
+                train_path = os.path.join(output_path, 'train')
+                test_path = os.path.join(output_path, 'test')
+                if not os.path.exists(train_path):
+                    os.mkdir(train_path)
+                if not os.path.exists(test_path):
+                    os.mkdir(test_path)
+                train = 80/100 * samples
+                for n in range(0, int(train)):
+                    shutil.move(os.path.join(output_path, 'sample_'+str(n)), train_path)
+                for m in range(int(train), samples):
+                    shutil.move(os.path.join(output_path, 'sample_'+str(m)), test_path)
+        else:
+            continue
 
