@@ -14,7 +14,8 @@ class Dataset(DS):
                        classes_to_use=None,
                        data_augmentation=False,
                        remove_part_prob=0.4,
-                       remove_outliers=False):
+                       remove_outliers=False,
+                       remove_corners=False):
         """
         Initialize the dataset class.
         :param root_folder: path to main folder containing data
@@ -24,6 +25,8 @@ class Dataset(DS):
         choose which ones to use. Use 'all' to get all the classes from root_folder.
         :param data_augmentation: boolean to decide if augmentation should be applied or not
         :param remove_part_prob: defines the probability of removing a point from the point cloud. If 0, no points are removed.
+        :param remove_outliers: boolean to decide if outliers should be removed or not
+        :param remove_corners: boolean to decide if corners should be removed or not
         """
         super().__init__()
         if classes_to_use is None:
@@ -40,6 +43,7 @@ class Dataset(DS):
         #if self.suffix == '.pts':
         self.labels = assign_labels(root_folder)
         self.p_remove_point = remove_part_prob
+        self.remove_corners = remove_corners
         # Find all files in the root folder with the given suffix
         self.filepaths = []
         for subdir, dirs, files in os.walk(self.root_folder):
@@ -59,15 +63,14 @@ class Dataset(DS):
         # Apply the rotation to each point in the point cloud
         augmented_point_cloud = np.dot(point_cloud[:, :3], rotation_matrix.T)
         #augmented_point_cloud = np.column_stack((augmented_point_cloud, point_cloud[:, 3:]))  # Append the intensity back
-        pc = augmented_point_cloud
+        return augmented_point_cloud
 
-        partial_pc = pc
-        if self.p_remove_point > 0:
-            num_points = len(pc)
-            remove_points_mask = np.random.choice([True, False], num_points, p=[self.p_remove_point , 1 - self.p_remove_point ])
-            partial_pc = pc[~remove_points_mask]
-
-        return pc, partial_pc
+    def _remove_points(self, point_cloud):
+        partial_pc = point_cloud
+        num_points = len(point_cloud)
+        remove_points_mask = np.random.choice([True, False], num_points, p=[self.p_remove_point , 1 - self.p_remove_point ])
+        partial_pc = point_cloud[~remove_points_mask]
+        return partial_pc
 
     def _remove_outliers(self, point_cloud):
         import hdbscan
@@ -78,6 +81,33 @@ class Dataset(DS):
         label_with_fewer_points = min(label_counts, key=label_counts.get)
         filtered_point_cloud = point_cloud[cluster_labels != label_with_fewer_points]
         return filtered_point_cloud
+
+    def _remove_corners(self, point_cloud):
+        import hdbscan
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=20, min_samples=None, algorithm='best', alpha=0.7,metric='euclidean')
+        cluster_labels = clusterer.fit_predict(point_cloud)
+        n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
+        p_remove_cluster = 0.5
+
+        if np.random.rand() < p_remove_cluster and n_clusters > 0:
+            # Exclude noise label (-1) from the list of unique labels if it exists
+            unique_clusters = set(cluster_labels)
+            if -1 in unique_clusters:
+                unique_clusters.remove(-1)
+            unique_clusters = list(unique_clusters)
+
+            # Randomly select a cluster to remove
+            cluster_to_remove = np.random.choice(unique_clusters)
+
+            # Create a mask for points to keep
+            mask = cluster_labels != cluster_to_remove
+
+            # Apply the mask to keep only the points that are not in the selected cluster
+            partial_pc = point_cloud[mask]
+        else:
+            partial_pc = self._remove_points(point_cloud)
+
+        return partial_pc
 
     def __len__(self):
         return len(self.filepaths)
@@ -117,7 +147,13 @@ class Dataset(DS):
             #rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
             #arr[:, [0, 2]] = arr[:, [0, 2]].dot(rotation_matrix)  # random rotation
             #arr += np.random.normal(0, 0.02, size=arr.shape)  # random jitter
-            arr, partial_arr = self._augment_data(arr)
+            arr = self._augment_data(arr)
+
+        if self.p_remove_point > 0 and self.remove_corners is False:
+            partial_arr = self._remove_points(arr)
+
+        if self.remove_corners:
+            partial_arr = self._remove_corners(arr)
 
         if self.remove_outliers:
             arr = self._remove_outliers(arr)

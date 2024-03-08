@@ -1,3 +1,5 @@
+# script with quick code snippets for testing purposes
+
 from helpers.readers import ReaderIMODfiles
 import os
 from helpers.visualization import print_pc_from_filearray
@@ -165,3 +167,39 @@ dist1 = torch.sqrt(dist1)
 dist2 = torch.sqrt(dist2)
 cdl1 = (torch.mean(dist1) + torch.mean(dist2)) / 2.0
 
+## print overlay PCs
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(pred[:, 0], pred[:, 1], pred[:, 2], color='red', marker='o', label='pred')
+ax.scatter(gt[:, 0], gt[:, 1], gt[:, 2], color='blue', marker='o', label='gt')
+plt.show()
+
+from scipy.spatial import KDTree
+
+tree = KDTree(gt)
+# Query the KD-tree for each source point to find its nearest neighbor in the target point cloud
+distances, _ = tree.query(unique_pred)
+
+
+# Normalize errors for color mapping
+normalized_errors = distances / np.max(distances)
+
+# Map normalized error values to a colormap
+colors = plt.cm.jet(normalized_errors)
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(unique_pred[:, 0], unique_pred[:, 1], unique_pred[:, 2], color=colors, marker='o')
+
+cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])  # [left, bottom, width, height]
+fig.subplots_adjust(right=0.8)  # Adjust main plot to make space for the colorbar
+
+# Add a color bar to interpret the error magnitudes
+mappable = plt.cm.ScalarMappable(cmap='jet', norm=plt.Normalize(vmin=np.min(distances), vmax=np.max(distances)))
+mappable.set_array(distances)
+cbar = fig.colorbar(mappable, cax=cbar_ax, aspect=5)
+cbar.set_label('Error')
+
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+plt.show()

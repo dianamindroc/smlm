@@ -1,0 +1,29 @@
+dataset:
+
+  root_folder: '/home/dim26fa/data/test_simulated_dna_origami/'
+  classes: ['all']
+  suffix: '.csv'
+  highest_shape: 500
+  remove_part_prob: 0.4
+  dataset_type: 'tetra'
+  remove_corners: True
+model: 'pcn'
+test:
+  lr: 0.001
+  batch_size: 64
+  num_workers: 6
+  momentum: 0.9
+  momentum2: 0.999
+  num_epochs: 500
+  cd_loss: 'ChamferDistanceL1'
+  early_stop_patience: 30
+  log_dir: '/home/dim26fa/coding/testing'
+  scheduler_type: reduce
+  scheduler_factor: 0.75
+  scheduler_patience: 10
+  gamma: 0.0001 # for other than stepLR use smaller values e.g. 0.0001
+  step_size: 50
+  ignore_zeros: False
+  augmentation: True
+  save: True
+  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240306_123851/best_l1_cd.pth'

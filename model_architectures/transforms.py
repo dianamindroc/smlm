@@ -21,6 +21,8 @@ class ToTensor(object):
             sample['label'] = torch.tensor(sample['label'], dtype=torch.float)
         elif 'label' in sample and isinstance(sample['label'], (int, float)):
             sample['label'] = torch.tensor([sample['label']], dtype=torch.float)
+        else:
+            sample['label'] = torch.tensor([0], dtype=torch.float)
 
         # Non-numeric data like 'path' are left as is
 

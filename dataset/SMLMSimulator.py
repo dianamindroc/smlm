@@ -161,5 +161,12 @@ class DNAOrigamiSimulator(Dataset):
             point_cloud = self.transform(point_cloud)
             if pc_without_corners is not None:
                 pc_without_corners = self.transform(pc_without_corners)
-        return ground_truth, point_cloud, pc_without_corners
+
+        label = self.structure_type
+
+        sample = {'pc': point_cloud,
+                  'partial_pc': pc_without_corners,
+                  'label': label}
+
+        return sample
 

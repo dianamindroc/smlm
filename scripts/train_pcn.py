@@ -1,5 +1,4 @@
 import argparse
-
 import torch
 import torchvision
 import torch.optim as optim
@@ -11,7 +10,8 @@ from torchvision import transforms
 import numpy as np
 import random
 import open3d as o3d
-
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 
 from helpers.data import get_highest_shape
 from helpers.logging import create_log_folder
@@ -42,10 +42,15 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
         'momentum': config.train.momentum,
         'momentum2': config.train.momentum2,
         'scheduler_type': config.train.scheduler_type,
+        'scheduler_factor': config.train.scheduler_factor,
+        'scheduler_patience': config.train.scheduler_patience,
         'gamma': config.train.gamma,
         'step_size': config.train.step_size,
         'coarse_dim': config.pcn_config.coarse_dim,
         'fine_dim': config.pcn_config.fine_dim,
+        'remove_part_prob': config.dataset.remove_part_prob,
+        'dataset': config.dataset.dataset_type,
+        'remove_corners': config.dataset.remove_corners
     }
     log_dir = create_log_folder(config.train.log_dir, config.model)
     print('Loading Data...')
@@ -55,15 +60,33 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     highest_shape = get_highest_shape(root_folder, classes)
     pc_transforms = transforms.Compose(
         [Padding(highest_shape), ToTensor()])
-    #train_dataset = ShapeNet('/home/dim26fa/data/PCN', 'train', 'airplane')
-    #val_dataset = ShapeNet('/home/dim26fa/data/PCN', 'valid', 'airplane')
-    full_dataset = Dataset(root_folder=root_folder,
-                           suffix=suffix,
-                           transform=pc_transforms,
-                           classes_to_use=classes,
-                           data_augmentation=True,
-                           remove_part_prob = 0.3,
-                           remove_outliers = False)
+
+    if train_config['dataset'] == 'shapenet':
+        train_dataset = ShapeNet(root_folder, 'train', classes)
+        val_dataset = ShapeNet(root_folder, 'valid', classes)
+    elif train_config['dataset']  == 'simulate':
+        # Dye properties dictionary
+        dye_properties_dict = {
+            'Alexa_Fluor_647': {'density_range': (10, 50), 'blinking_times_range': (10, 50), 'intensity_range': (500, 5000),
+                                'precision_range': (0.5, 2.0)},
+            # ... (other dyes)
+            }
+
+        # Choose a specific dye
+        selected_dye = 'Alexa_Fluor_647'
+        selected_dye_properties = dye_properties_dict[selected_dye]
+
+        full_dataset = DNAOrigamiSimulator(1000, 'box', selected_dye_properties, augment=True, remove_corners=True,
+                                          transform=pc_transforms)
+    else:
+        full_dataset = Dataset(root_folder=root_folder,
+                               suffix=suffix,
+                               transform=pc_transforms,
+                               classes_to_use=classes,
+                               data_augmentation=True,
+                               remove_part_prob = train_config['remove_part_prob'],
+                               remove_corners = train_config['remove_corners'],
+                               remove_outliers = False)
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
@@ -86,16 +109,16 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
         if train_config['scheduler_type'] == 'StepLR':
             scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=train_config['step_size'], gamma=train_config['gamma'])
         else:
-            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=4, verbose=True)
-    print('Scheduler activated')
+            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=train_config['scheduler_factor'], patience=train_config['scheduler_patience'], verbose=True)
+        print('Scheduler activated')
 
     if ckpt is not None:
         model.load_state_dict(torch.load(ckpt))
         print('Model loaded from ', ckpt)
-        #model.first_conv.requires_grad_(False)
-        #model.second_conv.requires_grad_(False)
+        model.first_conv.requires_grad_(False)
+        model.second_conv.requires_grad_(False)
         #model.mlp.requires_grad_(False)
-        #print('Frozen all but last layer')
+        print('Frozen all but last layer')
 
     if exp_name is not None:
         wandb.init(project='autoencoder training', name=exp_name, config=train_config)
@@ -109,7 +132,9 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     best_cd_l1 = 1e8
     best_epoch_l1 = -1
     train_step, val_step = 0, 0
+
     for epoch in range(1, train_config['num_epochs'] + 1):
+        wandb.log({'epoch': epoch})
         # hyperparameter alpha
         if fixed_alpha is not None:
             alpha = fixed_alpha
@@ -140,7 +165,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
             optimizer.zero_grad()
 
             # forward propagation
-            coarse_pred, dense_pred = model(p)
+            coarse_pred, dense_pred, _ = model(p)
 
             # loss function
             loss1 = losses.cd_loss_l1(coarse_pred, c)
@@ -161,6 +186,8 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
         # evaluation
         model.eval()
         total_cd_l1 = 0.0
+        labels_list = []
+        feature_space = []
         with torch.no_grad():
             rand_iter = random.randint(0, len(val_dataloader) - 1)  # for visualization
             #### ShapeNet dataset
@@ -175,7 +202,10 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                 mask_complete = data['pc_mask']
                 p = p.permute(0, 2, 1)
                 p, c = p.to(device), c.to(device)
-                coarse_pred, dense_pred = model(p)
+                coarse_pred, dense_pred, features = model(p)
+                label = data['label'].numpy()
+                labels_list.append(label)
+                feature_space.extend(features.detach().cpu().numpy())
                 total_cd_l1 += losses.l1_cd(dense_pred, c).item()
 
                 if i == rand_iter:
@@ -190,15 +220,23 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                                 [wandb.Object3D(gt),
                                  wandb.Object3D(input_pc),
                                  wandb.Object3D(output_pc)]})
+
             total_cd_l1 /= len(val_dataset)
             if train_config['scheduler_type'] != 'None':
                 if train_config['scheduler_type'] == 'StepLR':
                     scheduler.step()
                 else:
+                    prev_lr = optimizer.param_groups[0]['lr']
                     scheduler.step(total_cd_l1)
+                    current_lr = optimizer.param_groups[0]['lr']
+                    if prev_lr != current_lr:
+                        wandb.log({"lr": current_lr})
             val_step += 1
 
             print("Validate Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], total_cd_l1 * 1e3))
+            feature_array = np.vstack(feature_space)
+            labels_array = np.concatenate(labels_list)
+            plot_tsne(feature_array, labels_array, epoch, log_dir)
             wandb.log({'val_l1_cd': total_cd_l1 * 1e3})
 
         if total_cd_l1 < best_cd_l1:
@@ -206,7 +244,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
             best_cd_l1 = total_cd_l1
             torch.save(model.state_dict(), os.path.join(log_dir, 'best_l1_cd.pth'))
 
-
+    torch.cuda.empty_cache()
     print('Best l1 cd model in epoch {}, the minimum l1 cd is {}'.format(best_epoch_l1, best_cd_l1 * 1e3))
 
 def export_ply(filename, points):
@@ -214,6 +252,25 @@ def export_ply(filename, points):
     pc.points = o3d.utility.Vector3dVector(points)
     o3d.io.write_point_cloud(filename, pc, write_ascii=True)
 
+def plot_tsne(features, labels, epoch, log_dir):
+    color_map = {0: '#009999', 1: '#FFB266'}
+    tsne = TSNE(n_components=2)
+    tsne_results = tsne.fit_transform(features)
+    unique_labels = np.unique(labels)
+    for label in unique_labels:
+    # Find points in this cluster
+        idx = labels == label
+    # Plot these points with a unique color and label
+        plt.scatter(tsne_results[idx, 0], tsne_results[idx, 1], c=color_map[label], label=f'Cluster {label}')
+    plt.title(f't-SNE visualization (Epoch {epoch})')
+    plt.xlabel('t-SNE Dimension 1')
+    plt.ylabel('t-SNE Dimension 2')
+    plt.legend()
+
+    # Save the plot with a specific filename format
+    plt.savefig(os.path.join(log_dir, '{:03d}_tsne.png'.format(epoch)))
+     # Close the figure to free memory
+    plt.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('PCN')
