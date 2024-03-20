@@ -121,3 +121,4 @@ def update_csv(csv_file, dataset_name, highest_shape):
         existing_df = pd.read_csv(csv_file)
         updated_df = pd.concat([existing_df, df], ignore_index=True)
         updated_df.to_csv(csv_file, index=False)
+

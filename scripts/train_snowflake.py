@@ -18,7 +18,7 @@ matplotlib.use('Agg')
 from helpers.data import get_highest_shape
 from helpers.logging import create_log_folder
 from helpers.visualization import print_pc, save_plots
-from model_architectures import pcn, folding_net, pointr, losses
+from model_architectures import snowflakenet, losses
 from model_architectures.transforms import ToTensor, Padding
 from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric, set_seed
 from dataset.SMLMDataset import Dataset
@@ -102,7 +102,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     print('Device:', device)
 
     # model
-    model = pcn.PCN(num_dense=16384, latent_dim=1024, grid_size=4).to(device)
+    model = snowflakenet.SnowflakeNet()
 
     # optimizer
     #optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(0.9, 0.999))
@@ -144,12 +144,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     for epoch in range(1, train_config['num_epochs'] + 1):
         wandb.log({'epoch': epoch})
         # hyperparameter alpha
-        if epoch == 200 or epoch == 300:
-            changed_lr = False
-        if fixed_alpha is not None:
-            alpha = fixed_alpha
-        else:
-            adjust_alpha(epoch, changed_lr, train_config)
+
 
         # training
         model.train()
@@ -163,16 +158,16 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
             c = data['pc']
             p = data['partial_pc']
             mask_complete = data['pc_mask']
-            p = p.permute(0, 2, 1)
+            #p = p.permute(0, 2, 1)
             p, c = p.to(device), c.to(device)
             optimizer.zero_grad()
 
             # forward propagation
-            coarse_pred, dense_pred, _ = model(p)
+            pred = model(p)
 
             # loss function
-            loss1 = losses.cd_loss_l1(coarse_pred, c)
-            loss2 = losses.cd_loss_l1(dense_pred, c)
+            loss1 = losses.cd_loss_l1(pred, c)
+            #loss2 = losses.cd_loss_l1(dense_pred, c)
 #             loss1_history.append(loss1.item())
 #             if len(loss1_history) > min_improvement_epochs:
 #                 loss1_history.pop(0)
@@ -184,7 +179,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
 #                 if improvement < loss1_improvement_threshold:
 #                     # Increase alpha when improvement is less than threshold
 #                     alpha = min(alpha * 1.1, 1.0)
-            loss = loss1 + alpha * loss2
+            loss = loss1
 
             # back propagation
             loss.backward()
@@ -193,7 +188,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
         print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], loss * 1e3))
         wandb.log({'train_l1_cd': loss * 1e3})
         wandb.log({'alpha': alpha})
-        export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), dense_pred[0].detach().cpu().numpy())
+        export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), pred[0].detach().cpu().numpy())
         #export_ply(os.path.join(log_dir, '{:03d}.ply'.format(i)), np.transpose(dense_pred[0].detach().cpu().numpy(), (1,0)))
         #lr_schedual.step()
 
@@ -215,19 +210,19 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                 c = data['pc']
                 p = data['partial_pc']
                 mask_complete = data['pc_mask']
-                p = p.permute(0, 2, 1)
+                #p = p.permute(0, 2, 1)
                 p, c = p.to(device), c.to(device)
-                coarse_pred, dense_pred, features = model(p)
+                pred = model(p)
                 label = data['label'].numpy()
                 labels_list.append(label)
                 labels_names.append(data['label_name'])
                 feature_space.extend(features.detach().cpu().numpy())
-                total_cd_l1 += losses.l1_cd(dense_pred, c).item()
+                total_cd_l1 += losses.l1_cd(pred, c).item()
 
                 if i == rand_iter:
                     input_pc = p[0].detach().cpu().numpy()
                     input_pc = np.transpose(input_pc, (1, 0))
-                    output_pc = dense_pred[0].detach().cpu().numpy()
+                    output_pc = pred[0].detach().cpu().numpy()
                     gt = c[0].detach().cpu().numpy()
                     export_ply(os.path.join(log_dir, '{:03d}_input.ply'.format(epoch)), input_pc)
                     export_ply(os.path.join(log_dir, '{:03d}_output.ply'.format(epoch)), output_pc)

@@ -162,7 +162,8 @@ class Dataset(DS):
         sample = {'pc': arr,
                   'partial_pc': partial_arr,
                   'label': np.array(label),
-                  'path': filepath}
+                  'path': filepath,
+                  'label_name': cls}
 
         if self.transform is not None:
             sample = self.transform(sample)

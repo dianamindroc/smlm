@@ -1,6 +1,6 @@
 dataset:
 
-  root_folder: '/home/dim26fa/data/simulated_dna_origami/'
+  root_folder: '/home/dim26fa/data/simulated_dna_origami_anisotropy/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
@@ -25,6 +25,9 @@ train:
   step_size: 50
   ignore_zeros: False
   augmentation: True
+  initial_alpha: 0.01
+  loss1_improvement_threshold: 30
+  min_improvement_epochs: 10
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

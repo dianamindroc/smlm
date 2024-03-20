@@ -1,4 +1,5 @@
 import plotly.express as px
+import open3d as o3d
 import pandas as pd
 import numpy as np
 from skimage import exposure
@@ -227,3 +228,43 @@ def print_pc_from_filearray(point_clouds, path=None, epoch=0, loss=0, overlay=Fa
     else:
         raise ValueError("Invalid input. The function expects a list of file paths or a list of numpy arrays.")
 
+def show_error_pc(gt, pred):
+    if type(gt) != np.ndarray:
+        gt = np.array(gt.points)
+        pred = np.array(pred.points)
+    from scipy.spatial import KDTree
+    unique_pred = np.unique(pred, axis=0)
+    tree = KDTree(gt)
+    # Query the KD-tree for each source point to find its nearest neighbor in the target point cloud
+    distances, _ = tree.query(unique_pred)
+    normalized_errors = distances / np.max(distances)
+
+    # Map normalized error values to a colormap
+    colors = plt.cm.jet(normalized_errors)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(unique_pred[:, 0], unique_pred[:, 1], unique_pred[:, 2], color=colors, marker='o')
+
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])  # [left, bottom, width, height]
+    fig.subplots_adjust(right=0.8)  # Adjust main plot to make space for the colorbar
+
+    # Add a color bar to interpret the error magnitudes
+    mappable = plt.cm.ScalarMappable(cmap='jet', norm=plt.Normalize(vmin=np.min(distances), vmax=np.max(distances)))
+    mappable.set_array(distances)
+    cbar = fig.colorbar(mappable, cax=cbar_ax, aspect=5)
+    cbar.set_label('Error')
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    plt.show()
+
+def overlay_pc(gt, pred):
+    if type(gt) != np.ndarray:
+        gt = np.array(gt.points) # assuming gt and pred are open3d point clouds
+        pred = np.array(pred.points)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(pred[:, 0], pred[:, 1], pred[:, 2], color='red', marker='o', label='pred')
+    ax.scatter(gt[:, 0], gt[:, 1], gt[:, 2], color='blue', marker='o', label='gt')
+    plt.show()

@@ -1,5 +1,5 @@
 import random
-
+import os
 import numpy as np
 import torch
 import torchvision
@@ -8,6 +8,9 @@ import torch.nn as nn
 from pointnet2_ops import pointnet2_utils
 import yaml
 from easydict import EasyDict
+from pointnet2_ops.pointnet2_utils import furthest_point_sample, \
+    gather_operation, ball_query, three_nn, three_interpolate, grouping_operation
+
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 
 
@@ -175,3 +178,17 @@ def l1_cd_metric(pcs1, pcs2):
     dist1 = torch.mean(torch.sqrt(dist1), 1)
     dist2 = torch.mean(torch.sqrt(dist2), 1)
     return torch.sum(dist1 + dist2) / 2
+
+def set_seed(seed_value=42):
+    random.seed(seed_value)  # Python random module
+    np.random.seed(seed_value)  # NumPy
+    torch.manual_seed(seed_value)  # PyTorch
+    torch.cuda.manual_seed_all(seed_value)  # for multi-GPU
+    os.environ['PYTHONHASHSEED'] = str(seed_value)  # Python hash build-in randomization
+
+    # If using tensorflow, add the below line
+    # tf.random.set_seed(seed_value)
+
+    # Ensures that CUDA operations are deterministic. May impact performance.
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
