@@ -189,10 +189,10 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None, autoencoder=False)
             loss2 = losses.cd_loss_l1(dense_pred, c)
             loss = loss1 + alpha * loss2
 
-            class_loss = losses.mlp_loss_function(label, out_classifier)
+            #class_loss = losses.mlp_loss_function(label, out_classifier)
             # back propagation
             loss.backward()
-            class_loss.backward()
+            #class_loss.backward()
             optimizer.step()
             train_step += 1
         print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
@@ -233,7 +233,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None, autoencoder=False)
                 labels_list.append(label)
                 feature_space.extend(features.detach().cpu().numpy())
                 total_cd_l1 += losses.l1_cd(dense_pred, c).item()
-                class_loss = losses.mlp_loss_function(label, out_classifier)
+                #class_loss = losses.mlp_loss_function(label, out_classifier)
                 if i == rand_iter:
                     if autoencoder:
                         input_pc = c_per[0].detach().cpu().numpy()
@@ -286,15 +286,17 @@ def export_ply(filename, points):
 
 
 def plot_tsne(features, labels, epoch, log_dir):
-    color_map = {0: '#009999', 1: '#FFB266'}
+    #color_map = {0: '#009999', 1: '#FFB266', 2: 'black'}
     tsne = TSNE(n_components=2)
     tsne_results = tsne.fit_transform(features)
     unique_labels = np.unique(labels)
+    color_map = {label: plt.cm.jet(i / len(unique_labels)) for i, label in enumerate(unique_labels)}
+
     for label in unique_labels:
         # Find points in this cluster
         idx = labels == label
         # Plot these points with a unique color and label
-        plt.scatter(tsne_results[idx, 0], tsne_results[idx, 1], c=color_map[label], label=f'Cluster {label}')
+        plt.scatter(tsne_results[idx, 0], tsne_results[idx, 1], c=color_map[int(label)], label=f'Cluster {label}')
     plt.title(f't-SNE visualization (Epoch {epoch})')
     plt.xlabel('t-SNE Dimension 1')
     plt.ylabel('t-SNE Dimension 2')
