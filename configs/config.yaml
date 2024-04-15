@@ -7,10 +7,11 @@ dataset:
   remove_part_prob: 0.4
   dataset_type: 'tetra'
   remove_corners: True
+  initial_alpha: 1.0
 model: 'pcn'
 train:
   lr: 0.001
-  batch_size: 64
+  batch_size: 32
   num_workers: 6
   momentum: 0.9
   momentum2: 0.999

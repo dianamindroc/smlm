@@ -120,7 +120,7 @@ class SnowflakeNet(nn.Module):
         num_p0 = kwargs.get('num_p0', 512)
         radius = kwargs.get('radius', 1)
         bounding = kwargs.get('bounding', True)
-        up_factors = kwargs.get('up_factors', None)
+        up_factors = kwargs.get('up_factors', [1, 4, 8])
 
         super(SnowflakeNet, self).__init__()
         self.feat_extractor = FeatureExtractor(out_dim=dim_feat)
@@ -136,4 +136,4 @@ class SnowflakeNet(nn.Module):
         point_cloud = point_cloud.permute(0, 2, 1).contiguous()
         feat = self.feat_extractor(point_cloud)
         out = self.decoder(feat, pcd_bnc, return_P0=return_P0)
-        return out
+        return out, feat

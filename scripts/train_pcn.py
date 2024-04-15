@@ -22,13 +22,15 @@ from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric
 from dataset.SMLMDataset import Dataset
 from dataset.ShapeNet import ShapeNet
 from dataset.SMLMSimulator import DNAOrigamiSimulator
-#from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
+# from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 from model_architectures.pointr import validate
-#from chamferdist import ChamferDistance
+# from chamferdist import ChamferDistance
 import warnings
+
 warnings.filterwarnings("ignore")
 
-def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
+
+def train(config, ckpt=None, exp_name=None, fixed_alpha=None, autoencoder=False):
     wandb.login()
     torch.backends.cudnn.benchmark = True
     config = cfg_from_yaml_file(config)
@@ -64,34 +66,37 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     if train_config['dataset'] == 'shapenet':
         train_dataset = ShapeNet(root_folder, 'train', classes)
         val_dataset = ShapeNet(root_folder, 'valid', classes)
-    elif train_config['dataset']  == 'simulate':
+    elif train_config['dataset'] == 'simulate':
         # Dye properties dictionary
         dye_properties_dict = {
-            'Alexa_Fluor_647': {'density_range': (10, 50), 'blinking_times_range': (10, 50), 'intensity_range': (500, 5000),
+            'Alexa_Fluor_647': {'density_range': (10, 50), 'blinking_times_range': (10, 50),
+                                'intensity_range': (500, 5000),
                                 'precision_range': (0.5, 2.0)},
             # ... (other dyes)
-            }
+        }
 
         # Choose a specific dye
         selected_dye = 'Alexa_Fluor_647'
         selected_dye_properties = dye_properties_dict[selected_dye]
 
         full_dataset = DNAOrigamiSimulator(1000, 'box', selected_dye_properties, augment=True, remove_corners=True,
-                                          transform=pc_transforms)
+                                           transform=pc_transforms)
     else:
         full_dataset = Dataset(root_folder=root_folder,
                                suffix=suffix,
                                transform=pc_transforms,
                                classes_to_use=classes,
                                data_augmentation=True,
-                               remove_part_prob = train_config['remove_part_prob'],
-                               remove_corners = train_config['remove_corners'],
-                               remove_outliers = False)
+                               remove_part_prob=train_config['remove_part_prob'],
+                               remove_corners=train_config['remove_corners'],
+                               remove_outliers=False)
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=train_config['batch_size'], shuffle=True, num_workers=train_config['num_workers'])
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=train_config['batch_size'], shuffle=False, num_workers=train_config['num_workers'])
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=train_config['batch_size'], shuffle=True,
+                                                   num_workers=train_config['num_workers'])
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=train_config['batch_size'], shuffle=False,
+                                                 num_workers=train_config['num_workers'])
     print("Dataset loaded!")
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -103,13 +108,18 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     # optimizer
     #optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(0.9, 0.999))
     #lr_schedual = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.7)
-    optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(train_config['momentum'], train_config['momentum2']), weight_decay = train_config['gamma'])
+    optimizer = optim.Adam(model.parameters(), lr=train_config['lr'],
+                           betas=(train_config['momentum'], train_config['momentum2']),
+                           weight_decay=train_config['gamma'])
 
     if train_config['scheduler_type'] != 'None':
         if train_config['scheduler_type'] == 'StepLR':
-            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=train_config['step_size'], gamma=train_config['gamma'])
+            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=train_config['step_size'],
+                                                  gamma=train_config['gamma'])
         else:
-            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=train_config['scheduler_factor'], patience=train_config['scheduler_patience'], verbose=True)
+            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                             factor=train_config['scheduler_factor'],
+                                                             patience=train_config['scheduler_patience'], verbose=True)
         print('Scheduler activated')
 
     if ckpt is not None:
@@ -160,23 +170,33 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
             c = data['pc']
             p = data['partial_pc']
             mask_complete = data['pc_mask']
+            label = data['label']
+            if autoencoder:
+                c_per = c.permute(0, 2, 1)
+                c_per = c_per.to(device)
             p = p.permute(0, 2, 1)
             p, c = p.to(device), c.to(device)
             optimizer.zero_grad()
 
             # forward propagation
-            coarse_pred, dense_pred, _ = model(p)
+            if autoencoder:
+                coarse_pred, dense_pred, _, out_classifier = model(c_per)
+            else:
+                coarse_pred, dense_pred, _, out_classifier = model(p)
 
             # loss function
             loss1 = losses.cd_loss_l1(coarse_pred, c)
             loss2 = losses.cd_loss_l1(dense_pred, c)
             loss = loss1 + alpha * loss2
 
+            class_loss = losses.mlp_loss_function(label, out_classifier)
             # back propagation
             loss.backward()
+            class_loss.backward()
             optimizer.step()
             train_step += 1
-        print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], loss * 1e3))
+        print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
+                                                                                 loss * 1e3))
         wandb.log({'train_l1_cd': loss * 1e3})
         wandb.log({'alpha': alpha})
         export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), dense_pred[0].detach().cpu().numpy())
@@ -200,16 +220,25 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                 c = data['pc']
                 p = data['partial_pc']
                 mask_complete = data['pc_mask']
+                if autoencoder:
+                    c_per = c.permute(0, 2, 1)
+                    c_per = c_per.to(device)
                 p = p.permute(0, 2, 1)
                 p, c = p.to(device), c.to(device)
-                coarse_pred, dense_pred, features = model(p)
+                if autoencoder:
+                    coarse_pred, dense_pred, features, out_classifier = model(c_per)
+                else:
+                    coarse_pred, dense_pred, features, out_classifier = model(p)
                 label = data['label'].numpy()
                 labels_list.append(label)
                 feature_space.extend(features.detach().cpu().numpy())
                 total_cd_l1 += losses.l1_cd(dense_pred, c).item()
-
+                class_loss = losses.mlp_loss_function(label, out_classifier)
                 if i == rand_iter:
-                    input_pc = p[0].detach().cpu().numpy()
+                    if autoencoder:
+                        input_pc = c_per[0].detach().cpu().numpy()
+                    else:
+                        input_pc = p[0].detach().cpu().numpy()
                     input_pc = np.transpose(input_pc, (1, 0))
                     output_pc = dense_pred[0].detach().cpu().numpy()
                     gt = c[0].detach().cpu().numpy()
@@ -217,9 +246,9 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                     export_ply(os.path.join(log_dir, '{:03d}_output.ply'.format(epoch)), output_pc)
                     export_ply(os.path.join(log_dir, '{:03d}_gt.ply'.format(epoch)), gt)
                     wandb.log({"point_cloud_val (gt, input, pred)":
-                                [wandb.Object3D(gt),
-                                 wandb.Object3D(input_pc),
-                                 wandb.Object3D(output_pc)]})
+                                   [wandb.Object3D(gt),
+                                    wandb.Object3D(input_pc),
+                                    wandb.Object3D(output_pc)]})
 
             total_cd_l1 /= len(val_dataset)
             if train_config['scheduler_type'] != 'None':
@@ -233,7 +262,9 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                         wandb.log({"lr": current_lr})
             val_step += 1
 
-            print("Validate Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], total_cd_l1 * 1e3))
+            print(
+                "Validate Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
+                                                                                      total_cd_l1 * 1e3))
             feature_array = np.vstack(feature_space)
             labels_array = np.concatenate(labels_list)
             plot_tsne(feature_array, labels_array, epoch, log_dir)
@@ -247,10 +278,12 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     torch.cuda.empty_cache()
     print('Best l1 cd model in epoch {}, the minimum l1 cd is {}'.format(best_epoch_l1, best_cd_l1 * 1e3))
 
+
 def export_ply(filename, points):
     pc = o3d.geometry.PointCloud()
     pc.points = o3d.utility.Vector3dVector(points)
     o3d.io.write_point_cloud(filename, pc, write_ascii=True)
+
 
 def plot_tsne(features, labels, epoch, log_dir):
     color_map = {0: '#009999', 1: '#FFB266'}
@@ -258,9 +291,9 @@ def plot_tsne(features, labels, epoch, log_dir):
     tsne_results = tsne.fit_transform(features)
     unique_labels = np.unique(labels)
     for label in unique_labels:
-    # Find points in this cluster
+        # Find points in this cluster
         idx = labels == label
-    # Plot these points with a unique color and label
+        # Plot these points with a unique color and label
         plt.scatter(tsne_results[idx, 0], tsne_results[idx, 1], c=color_map[label], label=f'Cluster {label}')
     plt.title(f't-SNE visualization (Epoch {epoch})')
     plt.xlabel('t-SNE Dimension 1')
@@ -269,8 +302,9 @@ def plot_tsne(features, labels, epoch, log_dir):
 
     # Save the plot with a specific filename format
     plt.savefig(os.path.join(log_dir, '{:03d}_tsne.png'.format(epoch)))
-     # Close the figure to free memory
+    # Close the figure to free memory
     plt.close()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('PCN')

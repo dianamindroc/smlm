@@ -6,11 +6,13 @@ import pandas as pd
 import numpy as np
 
 class SMLMDnaOrigami:
-    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True):
+    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True, stats = None):
         self.struct_type = struct_type
         self.number_samples = number_dna_origami_samples
         self.dna_origami_list = []
         self.dna_origami = []
+        if stats is not None:
+            self.stats = stats
         if struct_type == 'cube':
             x, y, z, size = [int(x) for x in input("Enter cube coordinates and maximum size (separate by space): ").split()]
             self.model_structure = self.generate_cube(x, y, z, size)
@@ -93,7 +95,7 @@ class SMLMDnaOrigami:
         points = []
         #threequarter = int(3/4*len(num_points))
         variation = percentage
-        new_loc = int(num_points + random.uniform(-variation, variation))
+        adjusted_num_points = int(num_points * (1 + random.uniform(-variation_percentage / 100, variation_percentage / 100)))
         for i in range(new_loc):
             r = random.uniform(0, radius)
             theta = random.uniform(0, 2 * math.pi)
@@ -108,6 +110,25 @@ class SMLMDnaOrigami:
             z = center[2] + r * math.cos(phi)
 
             points.append((x, y, z))
+        return points
+
+    def generate_points_3d_with_stats(center, radius, num_points, percentage, stats):
+        """
+        Function to generate random points around a center based on given statistical metrics.
+        :param center: the coordinates of the center
+        :param radius: the radius in which the points should be generated
+        :param num_points: the number of points to generate
+        :param percentage: percentage of variation desired in the data
+        :param stats: dict containing 'mean' and 'std' for x, y, z dimensions
+        :return: list of generated points
+        """
+        points = []
+        for _ in range(num_points + int(random.uniform(-percentage, percentage))):
+            x = np.random.normal(loc=center[0] + stats['x']['mean'], scale=stats['x']['std'])
+            y = np.random.normal(loc=center[1] + stats['y']['mean'], scale=stats['y']['std'])
+            z = np.random.normal(loc=center[2] + stats['z']['mean'], scale=stats['z']['std'])
+            if ((x-center[0])**2 + (y-center[1])**2 + (z-center[2])**2)**0.5 <= radius:
+                points.append((x, y, z))
         return points
 
     def generate_one_dna_origami_smlm(self):
