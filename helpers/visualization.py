@@ -196,6 +196,10 @@ def _plot_point_cloud(point_clouds, overlay, path, epoch, loss, save=False):
             ax = fig.add_subplot(cols, rows, i, projection='3d')
             x, y, z = pc[:, 0], pc[:, 1], pc[:, 2]
             ax.scatter(x, y, z)
+            ax.grid(False)
+            ax.w_xaxis.pane.fill = False
+            ax.w_yaxis.pane.fill = False
+            ax.w_zaxis.pane.fill = False
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
             ax.set_zlabel('Z')

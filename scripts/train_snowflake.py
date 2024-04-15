@@ -18,7 +18,8 @@ matplotlib.use('Agg')
 from helpers.data import get_highest_shape
 from helpers.logging import create_log_folder
 from helpers.visualization import print_pc, save_plots
-from model_architectures import snowflakenet, losses
+from model_architectures import snowflakenet
+from model_architectures.snowflake_loss_utils import Completionloss
 from model_architectures.transforms import ToTensor, Padding
 from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric, set_seed
 from dataset.SMLMDataset import Dataset
@@ -103,7 +104,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
 
     # model
     model = snowflakenet.SnowflakeNet()
-
+    model.to(device)
     # optimizer
     #optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(0.9, 0.999))
     #lr_schedual = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.7)
@@ -136,11 +137,12 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     best_cd_l1 = 1e8
     best_epoch_l1 = -1
     train_step, val_step = 0, 0
-    alpha = config.train.initial_alpha
-    loss1_improvement_threshold = config.train.loss1_improvement_threshold # Define your own threshold
+    #alpha = config.train.initial_alpha
+    #loss1_improvement_threshold = config.train.loss1_improvement_threshold # Define your own threshold
     loss1_history = []
-    min_improvement_epochs = config.train.min_improvement_epochs  # Number of epochs to look back for improvement
+    #min_improvement_epochs = config.train.min_improvement_epochs  # Number of epochs to look back for improvement
     changed_lr = False
+    completion_loss = Completionloss(loss_func='cd_l1')
     for epoch in range(1, train_config['num_epochs'] + 1):
         wandb.log({'epoch': epoch})
         # hyperparameter alpha
@@ -163,10 +165,13 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
             optimizer.zero_grad()
 
             # forward propagation
-            pred = model(p)
-
+            pred, _ = model(p)
+            print(len(pred))
+            print(pred[0].shape)
+            print(pred[0][0].shape)
+            #pred = pred.cuda()
             # loss function
-            loss1 = losses.cd_loss_l1(pred, c)
+            loss_total, losses = completion_loss.get_loss(pred, p, c)
             #loss2 = losses.cd_loss_l1(dense_pred, c)
 #             loss1_history.append(loss1.item())
 #             if len(loss1_history) > min_improvement_epochs:
@@ -179,16 +184,16 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
 #                 if improvement < loss1_improvement_threshold:
 #                     # Increase alpha when improvement is less than threshold
 #                     alpha = min(alpha * 1.1, 1.0)
-            loss = loss1
+
 
             # back propagation
-            loss.backward()
+            loss_total.backward()
             optimizer.step()
             train_step += 1
-        print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], loss * 1e3))
-        wandb.log({'train_l1_cd': loss * 1e3})
-        wandb.log({'alpha': alpha})
-        export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), pred[0].detach().cpu().numpy())
+        print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], loss_total * 1e3))
+        wandb.log({'train_l1_cd': loss_total * 1e3})
+        #wandb.log({'alpha': alpha})
+        export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), pred[0][0].detach().cpu().numpy())
         #export_ply(os.path.join(log_dir, '{:03d}.ply'.format(i)), np.transpose(dense_pred[0].detach().cpu().numpy(), (1,0)))
         #lr_schedual.step()
 
@@ -212,17 +217,18 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                 mask_complete = data['pc_mask']
                 #p = p.permute(0, 2, 1)
                 p, c = p.to(device), c.to(device)
-                pred = model(p)
+                pred, features = model(p)
+                #pred = pred.cuda()
                 label = data['label'].numpy()
                 labels_list.append(label)
                 labels_names.append(data['label_name'])
                 feature_space.extend(features.detach().cpu().numpy())
-                total_cd_l1 += losses.l1_cd(pred, c).item()
-
+                loss_total, losses = completion_loss.get_loss(pred, p, c)
+                total_cd_l1 += loss_total.item()
                 if i == rand_iter:
                     input_pc = p[0].detach().cpu().numpy()
                     input_pc = np.transpose(input_pc, (1, 0))
-                    output_pc = pred[0].detach().cpu().numpy()
+                    output_pc = pred[0][0].detach().cpu().numpy()
                     gt = c[0].detach().cpu().numpy()
                     export_ply(os.path.join(log_dir, '{:03d}_input.ply'.format(epoch)), input_pc)
                     export_ply(os.path.join(log_dir, '{:03d}_output.ply'.format(epoch)), output_pc)

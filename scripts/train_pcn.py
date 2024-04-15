@@ -28,9 +28,11 @@ from dataset.SMLMSimulator import DNAOrigamiSimulator
 from model_architectures.pointr import validate
 #from chamferdist import ChamferDistance
 import warnings
+
 warnings.filterwarnings("ignore")
 
-def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
+
+def train(config, ckpt=None, exp_name=None, fixed_alpha=None, autoencoder=False):
     set_seed(42)
 
     wandb.login()
@@ -107,20 +109,25 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     # optimizer
     #optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(0.9, 0.999))
     #lr_schedual = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.7)
-    optimizer = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(train_config['momentum'], train_config['momentum2']), weight_decay = train_config['gamma'])
+    optimizer = optim.Adam(model.parameters(), lr=train_config['lr'],
+                           betas=(train_config['momentum'], train_config['momentum2']),
+                           weight_decay=train_config['gamma'])
 
     if train_config['scheduler_type'] != 'None':
         if train_config['scheduler_type'] == 'StepLR':
-            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=train_config['step_size'], gamma=train_config['gamma'])
+            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=train_config['step_size'],
+                                                  gamma=train_config['gamma'])
         else:
-            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=train_config['scheduler_factor'], patience=train_config['scheduler_patience'], verbose=True)
+            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                             factor=train_config['scheduler_factor'],
+                                                             patience=train_config['scheduler_patience'], verbose=True)
         print('Scheduler activated')
 
     if ckpt is not None:
         model.load_state_dict(torch.load(ckpt))
         print('Model loaded from ', ckpt)
-        #model.first_conv.requires_grad_(False)
-        #model.second_conv.requires_grad_(False)
+        model.first_conv.requires_grad_(False)
+        model.second_conv.requires_grad_(False)
         #model.mlp.requires_grad_(False)
         print('Frozen all but last layer')
 
@@ -149,7 +156,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
         if fixed_alpha is not None:
             alpha = fixed_alpha
         else:
-            adjust_alpha(epoch, changed_lr, train_config)
+            adjust_alpha(epoch, changed_lr, train_config, optimizer)
 
         # training
         model.train()
@@ -163,12 +170,19 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
             c = data['pc']
             p = data['partial_pc']
             mask_complete = data['pc_mask']
+            label = data['label']
+            if autoencoder:
+                c_per = c.permute(0, 2, 1)
+                c_per = c_per.to(device)
             p = p.permute(0, 2, 1)
             p, c = p.to(device), c.to(device)
             optimizer.zero_grad()
 
             # forward propagation
-            coarse_pred, dense_pred, _ = model(p)
+            if autoencoder:
+                coarse_pred, dense_pred, _, out_classifier = model(c_per)
+            else:
+                coarse_pred, dense_pred, _, out_classifier = model(p)
 
             # loss function
             loss1 = losses.cd_loss_l1(coarse_pred, c)
@@ -186,11 +200,14 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
 #                     alpha = min(alpha * 1.1, 1.0)
             loss = loss1 + alpha * loss2
 
+            class_loss = losses.mlp_loss_function(label, out_classifier)
             # back propagation
             loss.backward()
+            class_loss.backward()
             optimizer.step()
             train_step += 1
-        print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], loss * 1e3))
+        print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
+                                                                                 loss * 1e3))
         wandb.log({'train_l1_cd': loss * 1e3})
         wandb.log({'alpha': alpha})
         export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), dense_pred[0].detach().cpu().numpy())
@@ -215,17 +232,26 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                 c = data['pc']
                 p = data['partial_pc']
                 mask_complete = data['pc_mask']
+                if autoencoder:
+                    c_per = c.permute(0, 2, 1)
+                    c_per = c_per.to(device)
                 p = p.permute(0, 2, 1)
                 p, c = p.to(device), c.to(device)
-                coarse_pred, dense_pred, features = model(p)
+                if autoencoder:
+                    coarse_pred, dense_pred, features, out_classifier = model(c_per)
+                else:
+                    coarse_pred, dense_pred, features, out_classifier = model(p)
                 label = data['label'].numpy()
                 labels_list.append(label)
                 labels_names.append(data['label_name'])
                 feature_space.extend(features.detach().cpu().numpy())
                 total_cd_l1 += losses.l1_cd(dense_pred, c).item()
-
+                class_loss = losses.mlp_loss_function(label, out_classifier)
                 if i == rand_iter:
-                    input_pc = p[0].detach().cpu().numpy()
+                    if autoencoder:
+                        input_pc = c_per[0].detach().cpu().numpy()
+                    else:
+                        input_pc = p[0].detach().cpu().numpy()
                     input_pc = np.transpose(input_pc, (1, 0))
                     output_pc = dense_pred[0].detach().cpu().numpy()
                     gt = c[0].detach().cpu().numpy()
@@ -233,9 +259,9 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                     export_ply(os.path.join(log_dir, '{:03d}_output.ply'.format(epoch)), output_pc)
                     export_ply(os.path.join(log_dir, '{:03d}_gt.ply'.format(epoch)), gt)
                     wandb.log({"point_cloud_val (gt, input, pred)":
-                                [wandb.Object3D(gt),
-                                 wandb.Object3D(input_pc),
-                                 wandb.Object3D(output_pc)]})
+                                   [wandb.Object3D(gt),
+                                    wandb.Object3D(input_pc),
+                                    wandb.Object3D(output_pc)]})
 
             total_cd_l1 /= len(val_dataset)
             if train_config['scheduler_type'] != 'None':
@@ -263,6 +289,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
 
     torch.cuda.empty_cache()
     print('Best l1 cd model in epoch {}, the minimum l1 cd is {}'.format(best_epoch_l1, best_cd_l1 * 1e3))
+
 
 def export_ply(filename, points):
     pc = o3d.geometry.PointCloud()
@@ -292,7 +319,9 @@ def plot_tsne(features, labels, labels_names, epoch, log_dir):
      # Close the figure to free memory
     plt.close()
 
-def adjust_alpha(epoch, changed_lr, train_config):
+
+def adjust_alpha(epoch, changed_lr, train_config, optimizer):
+    # DOES NOT WORK YET
     if epoch < 120:
         alpha = 0.01
     elif epoch < 200 and changed_lr == False:
