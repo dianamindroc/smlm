@@ -51,7 +51,7 @@ class Dataset(DS):
                 if file.endswith(self.suffix) and subdir.split('/')[-1] in self.classes_to_use:
                     self.filepaths.append(os.path.join(subdir, file))
 
-    def _augment_data(self, point_cloud):
+    def _rotate_data(self, point_cloud):
         # Define a random rotation matrix
         theta = np.random.uniform(0, 2 * np.pi)  # Rotation angle
         rotation_matrix = np.array([
@@ -147,7 +147,8 @@ class Dataset(DS):
             #rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
             #arr[:, [0, 2]] = arr[:, [0, 2]].dot(rotation_matrix)  # random rotation
             #arr += np.random.normal(0, 0.02, size=arr.shape)  # random jitter
-            arr = self._augment_data(arr)
+            arr = self._rotate_data(arr)
+            arr =
 
         if self.p_remove_point > 0 and self.remove_corners is False:
             partial_arr = self._remove_points(arr)

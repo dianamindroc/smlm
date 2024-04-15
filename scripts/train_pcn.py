@@ -200,10 +200,10 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None, autoencoder=False)
 #                     alpha = min(alpha * 1.1, 1.0)
             loss = loss1 + alpha * loss2
 
-            class_loss = losses.mlp_loss_function(label, out_classifier)
+            #class_loss = losses.mlp_loss_function(label, out_classifier)
             # back propagation
             loss.backward()
-            class_loss.backward()
+            #class_loss.backward()
             optimizer.step()
             train_step += 1
         print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
@@ -246,7 +246,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None, autoencoder=False)
                 labels_names.append(data['label_name'])
                 feature_space.extend(features.detach().cpu().numpy())
                 total_cd_l1 += losses.l1_cd(dense_pred, c).item()
-                class_loss = losses.mlp_loss_function(label, out_classifier)
+                #class_loss = losses.mlp_loss_function(label, out_classifier)
                 if i == rand_iter:
                     if autoencoder:
                         input_pc = c_per[0].detach().cpu().numpy()
@@ -296,6 +296,7 @@ def export_ply(filename, points):
     pc.points = o3d.utility.Vector3dVector(points)
     o3d.io.write_point_cloud(filename, pc, write_ascii=True)
 
+
 def plot_tsne(features, labels, labels_names, epoch, log_dir):
     #color_map = {0: '#009999', 1: '#FFB266'}
     label_to_name = {label: name for label, name in zip(np.unique(labels), np.unique(labels_names))}
@@ -318,7 +319,6 @@ def plot_tsne(features, labels, labels_names, epoch, log_dir):
     plt.savefig(os.path.join(log_dir, '{:03d}_tsne.png'.format(epoch)))
      # Close the figure to free memory
     plt.close()
-
 
 def adjust_alpha(epoch, changed_lr, train_config, optimizer):
     # DOES NOT WORK YET
