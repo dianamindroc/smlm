@@ -30,7 +30,7 @@ from model_architectures.pointr import validate
 import warnings
 warnings.filterwarnings("ignore")
 
-def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
+def train(config, ckpt=None, exp_name=None, fixed_alpha=None, autoencoder=False):
     set_seed(42)
 
     wandb.login()
@@ -54,7 +54,10 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
         'fine_dim': config.pcn_config.fine_dim,
         'remove_part_prob': config.dataset.remove_part_prob,
         'dataset': config.dataset.dataset_type,
-        'remove_corners': config.dataset.remove_corners
+        'remove_corners': config.dataset.remove_corners,
+        'anisotropy': config.dataset.anisotropy,
+        'anisotropy_factor': config.dataset.anisotropy_factor,
+        'anisotropy_axis': config.dataset.anisotropy_axis
     }
     log_dir = create_log_folder(config.train.log_dir, config.model)
     print('Loading Data...')
@@ -89,8 +92,11 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                                classes_to_use=classes,
                                data_augmentation=True,
                                remove_part_prob = train_config['remove_part_prob'],
-                               remove_corners = train_config['remove_corners'],
-                               remove_outliers = False)
+                               remove_corners = False,
+                               remove_outliers = False,
+                               anisotropy = train_config['anisotropy'],
+                               anisotropy_axis=train_config['anisotropy_axis'],
+                               anisotropy_factor=train_config['anisotropy_factor'])
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
@@ -144,17 +150,22 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
     for epoch in range(1, train_config['num_epochs'] + 1):
         wandb.log({'epoch': epoch})
         # hyperparameter alpha
-        if epoch == 200 or epoch == 300:
-            changed_lr = False
         if fixed_alpha is not None:
             alpha = fixed_alpha
         else:
-            adjust_alpha(epoch, changed_lr, train_config)
+            if train_step < 10000:
+                alpha = 0.01
+            elif train_step < 20000:
+                alpha = 0.1
+            elif train_step < 50000:
+                alpha = 0.5
+            else:
+                alpha = 1.0
 
         # training
         model.train()
         #### ShapeNet dataset
-        #for i, (p, c) in enumerate(train_dataloader):
+        # for i, (p, c) in enumerate(train_dataloader):
         #    p = p.permute(0, 2, 1)
         #    p, c = p.to(device), c.to(device)
 
@@ -162,40 +173,44 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
         for i, data in enumerate(train_dataloader):
             c = data['pc']
             p = data['partial_pc']
+            c_anisotropic = data['pc_anisotropic']
             mask_complete = data['pc_mask']
+            label = data['label']
+            if autoencoder:
+                c_per = c.permute(0, 2, 1)
+                c_per = c_per.to(device)
+                c_anisotropic = c_anisotropic.permute(0, 2, 1)
+                c_anisotropic = c_anisotropic.to(device)
             p = p.permute(0, 2, 1)
             p, c = p.to(device), c.to(device)
             optimizer.zero_grad()
 
             # forward propagation
-            coarse_pred, dense_pred, _ = model(p)
+            if autoencoder:
+                #coarse_pred, dense_pred, _, out_classifier = model(c_per)
+                coarse_pred, dense_pred, _ = model(c_anisotropic)
+            else:
+                #coarse_pred, dense_pred, _, out_classifier = model(p)
+                coarse_pred, dense_pred, _ = model(p)
 
             # loss function
             loss1 = losses.cd_loss_l1(coarse_pred, c)
             loss2 = losses.cd_loss_l1(dense_pred, c)
-#             loss1_history.append(loss1.item())
-#             if len(loss1_history) > min_improvement_epochs:
-#                 loss1_history.pop(0)
-#
-#                 # Calculate the improvement in loss1
-#                 improvement = (loss1_history[-min_improvement_epochs] - loss1_history[-1])
-#
-#                 # Check for plateau in loss1 improvement
-#                 if improvement < loss1_improvement_threshold:
-#                     # Increase alpha when improvement is less than threshold
-#                     alpha = min(alpha * 1.1, 1.0)
             loss = loss1 + alpha * loss2
 
+            # class_loss = losses.mlp_loss_function(label, out_classifier)
             # back propagation
             loss.backward()
+            # class_loss.backward()
             optimizer.step()
             train_step += 1
-        print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], loss * 1e3))
+        print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
+                                                                                 loss * 1e3))
         wandb.log({'train_l1_cd': loss * 1e3})
         wandb.log({'alpha': alpha})
         export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), dense_pred[0].detach().cpu().numpy())
-        #export_ply(os.path.join(log_dir, '{:03d}.ply'.format(i)), np.transpose(dense_pred[0].detach().cpu().numpy(), (1,0)))
-        #lr_schedual.step()
+        # export_ply(os.path.join(log_dir, '{:03d}.ply'.format(i)), np.transpose(dense_pred[0].detach().cpu().numpy(), (1,0)))
+        # lr_schedual.step()
 
         # evaluation
         model.eval()
@@ -206,7 +221,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
         with torch.no_grad():
             rand_iter = random.randint(0, len(val_dataloader) - 1)  # for visualization
             #### ShapeNet dataset
-            #for i, (p, c) in enumerate(val_dataloader):
+            # for i, (p, c) in enumerate(val_dataloader):
             #    p = p.permute(0, 2, 1)
             #    p, c = p.to(device), c.to(device)
 
@@ -214,18 +229,33 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
             for i, data in enumerate(val_dataloader):
                 c = data['pc']
                 p = data['partial_pc']
+                c_anisotropic = data['pc_anisotropic']
                 mask_complete = data['pc_mask']
+                label = data['label']
+                if autoencoder:
+                    c_per = c.permute(0, 2, 1)
+                    c_per = c_per.to(device)
+                    c_anisotropic = c_anisotropic.permute(0, 2, 1)
+                    c_anisotropic = c_anisotropic.to(device)
                 p = p.permute(0, 2, 1)
                 p, c = p.to(device), c.to(device)
-                coarse_pred, dense_pred, features = model(p)
+                if autoencoder:
+                    #coarse_pred, dense_pred, features, out_classifier = model(c_per)
+                    coarse_pred, dense_pred, features = model(c_anisotropic)
+                else:
+                    #coarse_pred, dense_pred, features, out_classifier = model(p)
+                    coarse_pred, dense_pred, features = model(p)
                 label = data['label'].numpy()
                 labels_list.append(label)
                 labels_names.append(data['label_name'])
                 feature_space.extend(features.detach().cpu().numpy())
                 total_cd_l1 += losses.l1_cd(dense_pred, c).item()
-
+                # class_loss = losses.mlp_loss_function(label, out_classifier)
                 if i == rand_iter:
-                    input_pc = p[0].detach().cpu().numpy()
+                    if autoencoder:
+                        input_pc = c_anisotropic[0].detach().cpu().numpy()
+                    else:
+                        input_pc = p[0].detach().cpu().numpy()
                     input_pc = np.transpose(input_pc, (1, 0))
                     output_pc = dense_pred[0].detach().cpu().numpy()
                     gt = c[0].detach().cpu().numpy()
@@ -233,9 +263,9 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                     export_ply(os.path.join(log_dir, '{:03d}_output.ply'.format(epoch)), output_pc)
                     export_ply(os.path.join(log_dir, '{:03d}_gt.ply'.format(epoch)), gt)
                     wandb.log({"point_cloud_val (gt, input, pred)":
-                                [wandb.Object3D(gt),
-                                 wandb.Object3D(input_pc),
-                                 wandb.Object3D(output_pc)]})
+                                   [wandb.Object3D(gt),
+                                    wandb.Object3D(input_pc),
+                                    wandb.Object3D(output_pc)]})
 
             total_cd_l1 /= len(val_dataset)
             if train_config['scheduler_type'] != 'None':
@@ -249,7 +279,9 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
                         wandb.log({"lr": current_lr})
             val_step += 1
 
-            print("Validate Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], total_cd_l1 * 1e3))
+            print(
+                "Validate Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
+                                                                                      total_cd_l1 * 1e3))
             feature_array = np.vstack(feature_space)
             labels_array = np.concatenate(labels_list)
             labels_names = np.concatenate(labels_names)
@@ -263,6 +295,7 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None):
 
     torch.cuda.empty_cache()
     print('Best l1 cd model in epoch {}, the minimum l1 cd is {}'.format(best_epoch_l1, best_cd_l1 * 1e3))
+
 
 def export_ply(filename, points):
     pc = o3d.geometry.PointCloud()
@@ -292,7 +325,7 @@ def plot_tsne(features, labels, labels_names, epoch, log_dir):
      # Close the figure to free memory
     plt.close()
 
-def adjust_alpha(epoch, changed_lr, train_config):
+def adjust_alpha(epoch, changed_lr, train_config, optimizer):
     if epoch < 120:
         alpha = 0.01
     elif epoch < 200 and changed_lr == False:

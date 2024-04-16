@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 
 class SMLMDnaOrigami:
-    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True, anisotropic_axis='z', anisotropy_factor=3.0):
+    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True, anisotropic_axis='z'):
         self.struct_type = struct_type
         self.number_samples = number_dna_origami_samples
         self.dna_origami_list = []

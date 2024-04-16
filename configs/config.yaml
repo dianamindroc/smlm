@@ -1,12 +1,15 @@
 dataset:
 
-  root_folder: '/home/dim26fa/data/simulated_dna_origami_anisotropy/'
+  root_folder: '/home/dim26fa/data/simulated_dna_origami/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
   remove_part_prob: 0.4
   dataset_type: 'tetra'
-  remove_corners: True
+  remove_corners: False
+  anisotropy: True
+  anisotropy_factor: 2.0
+  anisotropy_axis: 'z'
 model: 'pcn'
 train:
   lr: 0.001

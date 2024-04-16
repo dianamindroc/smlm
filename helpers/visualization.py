@@ -186,7 +186,7 @@ def _plot_point_cloud(point_clouds, overlay, path, epoch, loss, save=False):
         for i, pc in enumerate(point_clouds):
             x, y, z = pc[:, 0], pc[:, 1], pc[:, 2]
 
-            ax.scatter(x, y, z, zorder = i, c=colours[i])
+            ax.scatter(x, y, z, zorder=i, c=colours[i])
 
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
@@ -227,6 +227,7 @@ def print_pc_from_filearray(point_clouds, path=None, epoch=0, loss=0, overlay=Fa
         _plot_point_cloud(point_clouds, overlay, path=path, epoch=epoch, loss=loss, save=save)
     else:
         raise ValueError("Invalid input. The function expects a list of file paths or a list of numpy arrays.")
+
 
 def show_error_pc(gt, pred):
     if type(gt) != np.ndarray:

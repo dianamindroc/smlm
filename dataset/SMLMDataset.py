@@ -15,7 +15,10 @@ class Dataset(DS):
                        data_augmentation=False,
                        remove_part_prob=0.4,
                        remove_outliers=False,
-                       remove_corners=False):
+                       remove_corners=False,
+                       anisotropy=False,
+                       anisotropy_axis='z',
+                       anisotropy_factor=2.0):
         """
         Initialize the dataset class.
         :param root_folder: path to main folder containing data
@@ -44,6 +47,9 @@ class Dataset(DS):
         self.labels = assign_labels(root_folder)
         self.p_remove_point = remove_part_prob
         self.remove_corners = remove_corners
+        self.anisotropy = anisotropy
+        self.anisotropy_axis = anisotropy_axis
+        self.anisotropy_factor = anisotropy_factor
         # Find all files in the root folder with the given suffix
         self.filepaths = []
         for subdir, dirs, files in os.walk(self.root_folder):
@@ -51,20 +57,53 @@ class Dataset(DS):
                 if file.endswith(self.suffix) and subdir.split('/')[-1] in self.classes_to_use:
                     self.filepaths.append(os.path.join(subdir, file))
 
-    def _augment_data(self, point_cloud):
+    def _rotate_data(self, point_cloud):
         # Define a random rotation matrix
-        theta = np.random.uniform(0, 2 * np.pi)  # Rotation angle
-        rotation_matrix = np.array([
-            [np.cos(theta), -np.sin(theta), 0],
-            [np.sin(theta), np.cos(theta), 0],
+        theta_x = np.random.uniform(0, 2 * np.pi)  # Rotation angle around x-axis
+        theta_y = np.random.uniform(0, 2 * np.pi)  # Rotation angle around y-axis
+        theta_z = np.random.uniform(0, 2 * np.pi)  # Rotation angle around z-axis
+
+        # Rotation matrix around x-axis
+        rot_x = np.array([
+            [1, 0, 0],
+            [0, np.cos(theta_x), -np.sin(theta_x)],
+            [0, np.sin(theta_x), np.cos(theta_x)]
+        ])
+
+        # Rotation matrix around y-axis
+        rot_y = np.array([
+            [np.cos(theta_y), 0, np.sin(theta_y)],
+            [0, 1, 0],
+            [-np.sin(theta_y), 0, np.cos(theta_y)]
+        ])
+
+        # Rotation matrix around z-axis
+        rot_z = np.array([
+            [np.cos(theta_z), -np.sin(theta_z), 0],
+            [np.sin(theta_z), np.cos(theta_z), 0],
             [0, 0, 1]
         ])
 
+        # Combined rotation matrix
+        rotation_matrix = rot_z @ rot_y @ rot_x
+
         # Apply the rotation to each point in the point cloud
-        augmented_point_cloud = np.dot(point_cloud[:, :3], rotation_matrix.T)
+        augmented_point_cloud = np.dot(point_cloud, rotation_matrix.T)
+
         #augmented_point_cloud = np.column_stack((augmented_point_cloud, point_cloud[:, 3:]))  # Append the intensity back
         return augmented_point_cloud
 
+    def _add_anisotropy(self, point_cloud, anisotropy_factor, anisotropic_axis):
+        if anisotropic_axis == 'x':
+            axis = 0
+        elif anisotropic_axis == 'y':
+            axis = 1
+        elif anisotropic_axis == 'z':
+            axis = 2
+
+        augmented_point_cloud = np.copy(point_cloud)
+        augmented_point_cloud[:, axis] *= anisotropy_factor
+        return augmented_point_cloud
     def _remove_points(self, point_cloud):
         partial_pc = point_cloud
         num_points = len(point_cloud)
@@ -147,7 +186,11 @@ class Dataset(DS):
             #rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
             #arr[:, [0, 2]] = arr[:, [0, 2]].dot(rotation_matrix)  # random rotation
             #arr += np.random.normal(0, 0.02, size=arr.shape)  # random jitter
-            arr = self._augment_data(arr)
+            arr = self._rotate_data(arr)
+        if self.anisotropy:
+            arr_anisotropy = self._add_anisotropy(arr, self.anisotropy_factor, self.anisotropy_axis)
+        else:
+            arr_anisotropy = arr
 
         if self.p_remove_point > 0 and self.remove_corners is False:
             partial_arr = self._remove_points(arr)
@@ -160,6 +203,7 @@ class Dataset(DS):
             partial_arr = self._remove_outliers(partial_arr)
 
         sample = {'pc': arr,
+                  'pc_anisotropic': arr_anisotropy,
                   'partial_pc': partial_arr,
                   'label': np.array(label),
                   'path': filepath,

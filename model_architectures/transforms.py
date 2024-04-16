@@ -15,6 +15,8 @@ class ToTensor(object):
             sample['pc_mask'] = torch.tensor(sample['pc_mask'], dtype=torch.float)
         if 'partial_pc_mask' in sample:
             sample['partial_pc_mask'] = torch.tensor(sample['partial_pc_mask'], dtype=torch.float)
+        if 'pc_anisotropic' in sample:
+            sample['pc_anisotropic'] = torch.tensor(sample['pc_anisotropic'], dtype=torch.float)
 
         # Convert 'label' to tensor if it's numeric
         if 'label' in sample and isinstance(sample['label'], (list, np.ndarray)):
@@ -70,11 +72,14 @@ class Padding(object):
         """
         pc, pc_mask = self.pad_point_cloud(sample['pc'])
         partial_pc, partial_pc_mask = self.pad_point_cloud(sample['partial_pc'])
+        pc_anisotropic, pc_anisotropic_mask = self.pad_point_cloud(sample['pc_anisotropic'])
 
         # Update the sample dictionary with padded point clouds and their masks
         sample['pc'] = pc
         sample['partial_pc'] = partial_pc
         sample['pc_mask'] = pc_mask
         sample['partial_pc_mask'] = partial_pc_mask
+        sample['pc_anisotropic'] = pc_anisotropic
+        sample['pc_anisotropic_mask'] = pc_anisotropic_mask
 
         return sample

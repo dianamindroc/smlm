@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn as nn
-
+from torch.nn import functional as F
 
 class PCN(nn.Module):
     """
@@ -65,6 +65,21 @@ class PCN(nn.Module):
 
         self.folding_seed = torch.cat([a, b], dim=0).view(1, 2, self.grid_size ** 2).cuda()  # (1, 2, S)
 
+        ### MLP for binary classification
+        # self.mlp1 = nn.Linear(self.latent_dim, int(self.latent_dim/2))
+        # self.bn1_mlp = nn.BatchNorm1d(int(self.latent_dim/2))
+        # self.mlp2 = nn.Linear(int(self.latent_dim/2), int(self.latent_dim/4))
+        # self.bn2_mlp = nn.BatchNorm1d(int(self.latent_dim/4))
+        # self.mlp3 = nn.Linear(int(self.latent_dim/4), 1)
+        # #self.bn3_mlp = nn.BatchNorm1d(1)
+        # self.sigmoid_mlp = nn.Sigmoid()
+
+    def mlp_classification(self, z): #icetin: mlp part that is connected to z
+        out_mlp = F.relu(self.bn1_mlp(self.mlp1(z))) # input: z output: prediction
+        out_mlp = F.relu(self.bn2_mlp(self.mlp2(out_mlp)))
+        out_mlp = self.sigmoid_mlp(self.mlp3(out_mlp))
+        return out_mlp
+
     def forward(self, xyz):
         B, _, N = xyz.shape
 
@@ -75,6 +90,9 @@ class PCN(nn.Module):
         feature = torch.cat([feature_global.expand(-1, -1, N), feature], dim=1)  # (B,  512, N)
         feature = self.second_conv(feature)  # (B, 1024, N)
         feature_global_return = torch.max(feature, dim=2, keepdim=False)[0]  # (B, 1024)
+
+        #classifier
+        #out_classifier = self.mlp_classification(feature_global_return)
 
         # decoder
         coarse = self.mlp(feature_global_return).reshape(-1, self.num_coarse, 3)  # (B, num_coarse, 3), coarse point cloud
@@ -89,4 +107,4 @@ class PCN(nn.Module):
 
         fine = self.final_conv(feat) + point_feat  # (B, 3, num_fine), fine point cloud
 
-        return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return
+        return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return #, out_classifier
