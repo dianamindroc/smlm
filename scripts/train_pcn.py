@@ -28,13 +28,11 @@ from dataset.SMLMSimulator import DNAOrigamiSimulator
 from model_architectures.pointr import validate
 #from chamferdist import ChamferDistance
 import warnings
-
 warnings.filterwarnings("ignore")
 
 
 def train(config, ckpt=None, exp_name=None, fixed_alpha=None, autoencoder=False):
     set_seed(42)
-
     wandb.login()
     torch.backends.cudnn.benchmark = True
     config = cfg_from_yaml_file(config)
@@ -70,34 +68,37 @@ def train(config, ckpt=None, exp_name=None, fixed_alpha=None, autoencoder=False)
     if train_config['dataset'] == 'shapenet':
         train_dataset = ShapeNet(root_folder, 'train', classes)
         val_dataset = ShapeNet(root_folder, 'valid', classes)
-    elif train_config['dataset']  == 'simulate':
+    elif train_config['dataset'] == 'simulate':
         # Dye properties dictionary
         dye_properties_dict = {
-            'Alexa_Fluor_647': {'density_range': (10, 50), 'blinking_times_range': (10, 50), 'intensity_range': (500, 5000),
+            'Alexa_Fluor_647': {'density_range': (10, 50), 'blinking_times_range': (10, 50),
+                                'intensity_range': (500, 5000),
                                 'precision_range': (0.5, 2.0)},
             # ... (other dyes)
-            }
+        }
 
         # Choose a specific dye
         selected_dye = 'Alexa_Fluor_647'
         selected_dye_properties = dye_properties_dict[selected_dye]
 
         full_dataset = DNAOrigamiSimulator(1000, 'box', selected_dye_properties, augment=True, remove_corners=True,
-                                          transform=pc_transforms)
+                                           transform=pc_transforms)
     else:
         full_dataset = Dataset(root_folder=root_folder,
                                suffix=suffix,
                                transform=pc_transforms,
                                classes_to_use=classes,
                                data_augmentation=True,
-                               remove_part_prob = train_config['remove_part_prob'],
-                               remove_corners = train_config['remove_corners'],
-                               remove_outliers = False)
+                               remove_part_prob=train_config['remove_part_prob'],
+                               remove_corners=train_config['remove_corners'],
+                               remove_outliers=False)
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=train_config['batch_size'], shuffle=True, num_workers=train_config['num_workers'])
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=train_config['batch_size'], shuffle=False, num_workers=train_config['num_workers'])
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=train_config['batch_size'], shuffle=True,
+                                                   num_workers=train_config['num_workers'])
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=train_config['batch_size'], shuffle=False,
+                                                 num_workers=train_config['num_workers'])
     print("Dataset loaded!")
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -336,6 +337,7 @@ def adjust_alpha(epoch, changed_lr, train_config, optimizer):
         alpha = 1.0
         optimizer.param_groups[0]['lr'] = train_config['lr']
         changed_lr = True
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('PCN')
