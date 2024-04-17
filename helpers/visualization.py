@@ -180,7 +180,10 @@ def _plot_point_cloud(point_clouds, overlay, path, epoch, loss, save=False):
 
     colours = ['blue', 'orange', 'green']
 
+    plt.style.use('dark_background')
     fig = plt.figure()
+    fig.set_size_inches(19.20, 10.80)
+    fig.patch.set_facecolor('black')
     if overlay:
         ax = fig.add_subplot(111, projection='3d')
         for i, pc in enumerate(point_clouds):
@@ -204,8 +207,14 @@ def _plot_point_cloud(point_clouds, overlay, path, epoch, loss, save=False):
             ax.set_ylabel('Y')
             ax.set_zlabel('Z')
 
+            # Set the color of the axis spines
+            ax.xaxis.label.set_color('white')
+            ax.yaxis.label.set_color('white')
+            ax.zaxis.label.set_color('white')
+            ax.tick_params(axis='both', colors='white')
+
     plt.tight_layout()
-    #plt.show()
+    plt.show()
 
     plt.suptitle(f"Epoch: {epoch}, Loss: {loss}")
 
