@@ -1,5 +1,5 @@
 import random
-import os
+
 import numpy as np
 import torch
 import torchvision
@@ -12,7 +12,7 @@ from pointnet2_ops.pointnet2_utils import furthest_point_sample, \
     gather_operation, ball_query, three_nn, three_interpolate, grouping_operation
 
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
-
+import os
 
 def show_point_cloud(point_cloud, axis=False):
     """visual a point cloud
@@ -192,3 +192,4 @@ def set_seed(seed_value=42):
     # Ensures that CUDA operations are deterministic. May impact performance.
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+

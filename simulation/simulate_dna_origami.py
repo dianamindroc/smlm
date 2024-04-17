@@ -6,11 +6,13 @@ import pandas as pd
 import numpy as np
 
 class SMLMDnaOrigami:
-    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True, anisotropic_axis='z'):
+    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True, stats=None):
         self.struct_type = struct_type
         self.number_samples = number_dna_origami_samples
         self.dna_origami_list = []
         self.dna_origami = []
+        if stats is not None:
+            self.stats = stats
         if struct_type == 'cube':
             x, y, z, size = [int(x) for x in input("Enter cube coordinates and maximum size (separate by space): ").split()]
             self.model_structure = self.generate_cube(x, y, z, size)
@@ -24,8 +26,6 @@ class SMLMDnaOrigami:
             self.model_structure = self.generate_sphere(radius, latitude_divisions, longitude_divisions)
         else:
             raise NotImplementedError("Only cube and pyramid supported at the moment :)")
-        self.anisotropic_axis = anisotropic_axis
-        self.anisotropy_factor = float(input("Enter anisotropy factor (bigger than 1.0): "))
         self.radius = int(input("What is the maximum radius in which to generate SMLM samples?"))
         self.number_localizations, self.percentage = [int(x) for x in input("How many localizations to generate around each center and with which variation (separate by space)?").split()]
         self.base_folder = input("Where to save the generated samples?")
@@ -83,7 +83,7 @@ class SMLMDnaOrigami:
         return coordinates
 
     @staticmethod
-    def generate_points_3d(center, radius, num_points, percentage, anisotropy_factor=3.0, anisotropic_axis='z'):
+    def generate_points_3d(center, radius, num_points, percentage):
         """"
         Function to generate random points around a center
         :param center: the coordinates of the center
@@ -94,8 +94,7 @@ class SMLMDnaOrigami:
         """
         points = []
         #threequarter = int(3/4*len(num_points))
-        variation = percentage
-        new_loc = int(num_points + random.uniform(-variation, variation))
+        new_loc = int(num_points + random.uniform(-percentage, percentage))
         for i in range(new_loc):
             r = random.uniform(0, radius)
             theta = random.uniform(0, 2 * math.pi)
@@ -109,18 +108,6 @@ class SMLMDnaOrigami:
             y = center[1] + r * math.sin(phi) * math.sin(theta)
             z = center[2] + r * math.cos(phi)
 
-            # Apply anisotropy scaling factor to the selected axis
-            if anisotropic_axis == 'x':
-                x *= anisotropy_factor
-            elif anisotropic_axis == 'y':
-                y *= anisotropy_factor
-            elif anisotropic_axis == 'z':
-                z *= anisotropy_factor
-
-            # Translate the point by the center coordinates
-            x += center[0]
-            y += center[1]
-            z += center[2]
             points.append((x, y, z))
         return points
 
@@ -136,7 +123,7 @@ class SMLMDnaOrigami:
         """
         radius = int(random.choice(range(1, self.radius)))
         for corner in self.model_structure:
-            self.dna_origami.append(self.generate_points_3d(corner, radius, self.number_localizations, self.percentage, self.anisotropy_factor, self.anisotropic_axis))
+            self.dna_origami.append(self.generate_points_3d(corner, radius, self.number_localizations, self.percentage))
             self.dna_origami_list.append(self.dna_origami)
 
     def generate_all_dna_origami_smlm_samples(self):

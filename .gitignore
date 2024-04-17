@@ -19,6 +19,7 @@ scripts/test.py
 scripts/*.def
 scripts/*.sif
 scripts/*.yaml
+scripts/quick_read.py
 
 notebooks/*.html
 notebooks/GeometricShapes

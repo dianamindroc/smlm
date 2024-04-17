@@ -203,3 +203,313 @@ ax.set_xlabel('X')
 ax.set_ylabel('Y')
 ax.set_zlabel('Z')
 plt.show()
+
+### Reading gt + pred
+import open3d as o3d
+import pandas as pd
+import numpy as np
+import os
+pred_ply = o3d.io.read_point_cloud('/home/dim26fa/coding/training/logs_pcn_20240409_111553/236_output.ply')
+gt_ply = o3d.io.read_point_cloud('/home/dim26fa/coding/training/logs_pcn_20240409_111553/236_gt.ply')
+pred = pd.DataFrame(pred_ply.points, columns=['x', 'y', 'z'])
+gt = pd.DataFrame(gt_ply.points, columns=['x', 'y', 'z'])
+pred = pred.drop_duplicates()
+pred = np.array(pred)
+gt = np.array(gt_ply.points)
+
+# Define the folder containing your .ply files
+folder_path = '/home/dim26fa/coding/training/logs_pcn_20240409_111553/'
+
+# List all .ply files in the folder
+ply_files = [f for f in os.listdir(folder_path) if f.endswith('.ply')]
+pred_dfs = {}
+gt_dfs = {}
+
+# Process files and convert to pandas DataFrame
+for file_name in ply_files:
+    # Separate into pred and gt based on file naming convention
+    if 'output' in file_name:
+        identifier = file_name.split('_output')[0]  # This assumes a specific part of the file name can serve as an identifier
+        file_path = os.path.join(folder_path, file_name)
+        point_cloud = o3d.io.read_point_cloud(file_path)
+        pred_dfs[identifier] = pd.DataFrame(point_cloud.points, columns=['x', 'y', 'z']).drop_duplicates()
+    elif 'gt' in file_name:
+        identifier = file_name.split('_gt')[0]
+        file_path = os.path.join(folder_path, file_name)
+        point_cloud = o3d.io.read_point_cloud(file_path)
+        gt_dfs[identifier] = pd.DataFrame(point_cloud.points, columns=['x', 'y', 'z']).drop_duplicates()
+
+# Initialize the list to hold the pairs
+datasets = []
+
+# Assuming the keys in `pred_dfs` and `gt_dfs` match and represent the same samples
+for identifier in pred_dfs.keys():
+    # Check if the identifier exists in both dictionaries before pairing
+    if identifier in gt_dfs:
+        pred_df = pred_dfs[identifier]
+        gt_df = gt_dfs[identifier]
+        datasets.append((pred_df, gt_df))
+
+for i, (pred, new_data) in enumerate(datasets, start=1):
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter3d(
+            x=pred['x'],
+            y=pred['y'],
+            z=pred['z'],
+            mode='markers',
+            marker=dict(size=5, color='blue', opacity=0.5),
+            name=f'Dataset 1 - Plot {i}'
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter3d(
+            x=new_data['x'],
+            y=new_data['y'],
+            z=new_data['z'],
+            mode='markers',
+            marker=dict(size=5, color='red', opacity=0.5),
+            name=f'Dataset 2 - Plot {i}'
+        )
+    )
+
+    fig.show()
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(pred[:, 0], pred[:, 1], pred[:, 2], color='red', marker='o', label='pred')
+ax.scatter(gt[:, 0], gt[:, 1], gt[:, 2], color='blue', marker='o', label='gt')
+plt.show()
+
+import plotly.io as pio
+pio.renderers.default = "browser"
+import plotly.express as px
+import plotly.graph_objects as go
+fig = px.scatter_3d(pred, x='x', y='y', z='z', size_max=1, color='red')
+fig.add_trace(px.scatter_3d(gt, x='x', y='y', z='z', size_max=1).data[0], color='blue')
+fig.show()
+
+# Your first dataset plotted with Plotly Express for convenience
+# Creating the figure object
+fig = go.Figure()
+
+fig = make_subplots(rows=2, cols=5,
+                    specs=[[{'type': 'scatter3d'} for _ in range(5)] for _ in range(2)],
+                    subplot_titles=[f'Pair {i+1}' for i in range(10)],
+                    horizontal_spacing=0.02, vertical_spacing=0.1)
+
+# Adding the first dataset with a specified name and color
+fig.add_trace(
+    go.Scatter3d(
+        x=pred['x'],
+        y=pred['y'],
+        z=pred['z'],
+        mode='markers',
+        marker=dict(
+            size=3,  # Adjust the size as needed
+            color='blue',  # Specifying color for the first dataset
+            opacity=0.5
+        ),
+        name='predicted'  # Naming the first dataset
+    )
+)
+
+# Adding the second dataset with a different specified name and color
+fig.add_trace(
+    go.Scatter3d(
+        x=gt['x'],
+        y=gt['y'],
+        z=gt['z'],
+        mode='markers',
+        marker=dict(
+            size=3,  # Adjust the size as needed
+            color='red',  # Specifying color for the second dataset
+            opacity=0.5
+        ),
+        name='ground truth'  # Naming the second dataset
+    )
+)
+
+clusterer = hdbscan.HDBSCAN(min_cluster_size=20, min_samples=2)
+cluster_labels_gt = clusterer.fit_predict(gt[['x', 'y', 'z']])
+gt['cluster_label'] = cluster_labels_gt
+centers_of_mass_gt = gt.groupby('cluster_label').mean().reset_index()
+fig.add_trace(
+    go.Scatter3d(
+        x=centers_of_mass_gt['x'],
+        y=centers_of_mass_gt['y'],
+        z=centers_of_mass_gt['z'],
+        mode='markers+text',
+        marker=dict(size=7, color='black', symbol='diamond', opacity=0.7),
+        text=centers_of_mass_gt['cluster_label'],
+        textposition='top center',
+        name='Center of Mass - GT'
+    )
+)
+
+clusterer = hdbscan.HDBSCAN(min_cluster_size=10, min_samples=2)
+cluster_labels_pred = clusterer.fit_predict(pred[['x', 'y', 'z']])
+pred['cluster_label'] = cluster_labels_pred
+centers_of_mass_pred = pred.groupby('cluster_label').mean().reset_index()
+fig.add_trace(
+    go.Scatter3d(
+        x=centers_of_mass_pred['x'],
+        y=centers_of_mass_pred['y'],
+        z=centers_of_mass_pred['z'],
+        mode='markers+text',
+        marker=dict(size=7, color='green', symbol='diamond', opacity=0.7),
+        text=centers_of_mass_pred['cluster_label'],
+        textposition='top center',
+        name='Center of Mass - PRED'
+    )
+)
+# Display the figure
+fig.show()
+
+#### Viz stats
+
+# Ensure your stats_list is available with all the necessary statistics
+
+# Histogram of the Number of Points using Seaborn
+if style=='dark':
+    sns.set_style("dark", {'axes.facecolor': 'black', 'figure.facecolor': 'black'})
+    clr = 'white'
+else:
+    sns.set_style("white")
+    clr = 'black'
+num_points = [stats['num_points'] for stats in stats]
+sns.histplot(num_points, bins=20, kde=True, color='steelblue')  # KDE (Kernel Density Estimate) adds a smoothed line to help understand the distribution shape
+plt.title('Distribution of Number of Points - exp_tetra', color=clr)
+plt.xlabel('Number of Points', color=clr)
+plt.ylabel('Frequency', color=clr)
+if style=='dark':
+    plt.tick_params(colors=clr)
+plt.show()
+
+# Box Plot for Bounding Box Sizes with Seaborn
+# Convert bounding box sizes to a DataFrame for easier plotting with seaborn
+bounding_box_sizes_df = pd.DataFrame([stats['bounding_box_size'] for stats in stats], columns=['x', 'y', 'z'])
+# Melt the DataFrame to long-format for seaborn's boxplot
+bounding_box_sizes_melted = bounding_box_sizes_df.melt(var_name='Dimension', value_name='Size')
+
+sns.boxplot(x='Dimension', y='Size', data=bounding_box_sizes_melted,
+            color='steelblue',  # Color of the box fill
+            linewidth=1,    # Thickness of the lines
+            fliersize=5,     # Size of the outlier markers
+            flierprops={'markerfacecolor':'white', 'markeredgecolor':'white'},  # Outlier styles
+            medianprops={'color':'white'},  # Median line style
+            whiskerprops={'color':'white'},  # Whisker line style
+            capprops={'color':'white'},      # Cap line style
+            boxprops={'edgecolor':'white'})  # Box edge line style)
+plt.title('Bounding Box Size Distribution - exp_tetra', color=clr)
+if style=='dark':
+    plt.tick_params(colors=clr)
+plt.xlabel('Dimension', color=clr)
+plt.ylabel('Size', color=clr)
+plt.show()
+
+std_dev_df = pd.DataFrame([stats['std_dev'] for stats in stats], columns=['x', 'y', 'z'])
+
+std_dev_melted = std_dev_df.melt(var_name='Dimension', value_name='Standard Deviation')
+
+sns.boxplot(x='Dimension', y='Standard Deviation', data=std_dev_melted,
+            color='steelblue',
+            linewidth=1, flierprops={'markerfacecolor':'white', 'markeredgecolor':'white'},
+            medianprops={'color':'white'}, whiskerprops={'color':'white'},
+            capprops={'color':'white'}, boxprops={'edgecolor':'white'})
+
+plt.title('Standard Deviation Distribution by Dimension - exp_tetra', color='white')
+plt.xlabel('Dimension', color='white')
+plt.ylabel('Standard Deviation', color='white')
+plt.tick_params(colors='white')
+plt.show()
+
+eigenvalues_df = pd.DataFrame([stats['eigenvalues'] for stats in stats], columns=['1st Principal', '2nd Principal', '3rd Principal'])
+eigenvalues_melted = eigenvalues_df.melt(var_name='Principal Component', value_name='Eigenvalue')
+
+sns.boxplot(x='Principal Component', y='Eigenvalue', data=eigenvalues_melted,
+            color='steelblue',
+            linewidth=1, flierprops={'markerfacecolor':'white', 'markeredgecolor':'white'},
+            medianprops={'color':'white'}, whiskerprops={'color':'white'},
+            capprops={'color':'white'}, boxprops={'edgecolor':'white'})
+
+plt.title('Eigenvalue Distribution by Principal Component - exp_tetra', color='white')
+plt.xlabel('Principal Component', color='white')
+plt.ylabel('Eigenvalue', color='white')
+plt.tick_params(colors='white')
+plt.show()
+
+df = pd.DataFrame(pd.read_csv(pcs[1]))
+
+# Setting the background style for better visibility
+if style=='dark':
+    sns.set_style("dark", {'axes.facecolor': 'black', 'figure.facecolor': 'black'})
+    clr = 'white'
+else:
+    sns.set_style("white")
+    clr = 'black'
+
+# Plotting histograms
+plt.figure(figsize=(18, 5))
+
+plt.subplot(1, 3, 1)
+sns.histplot(df['x'], kde=True, color='r')
+plt.title('Distribution of Points in X Direction', color=clr)
+plt.xlabel('x', color=clr)
+plt.ylabel('Count', color=clr)
+plt.tick_params(colors=clr)
+
+plt.subplot(1, 3, 2)
+sns.histplot(df['y'], kde=True, color='g')
+plt.title('Distribution of Points in Y Direction', color=clr)
+plt.xlabel('y', color=clr)
+plt.ylabel('Count', color=clr)
+plt.tick_params(colors=clr)
+
+plt.subplot(1, 3, 3)
+sns.histplot(df['z'], kde=True, color='b')
+plt.title('Distribution of Points in Z Direction', color=clr)
+plt.xlabel('z', color=clr)
+plt.ylabel('Count', color=clr)
+plt.tick_params(colors=clr)
+
+plt.tight_layout()
+plt.show()
+
+# Plotting box plots
+plt.figure(figsize=(10, 6))
+sns.boxplot(data=df)
+plt.title('Box Plot of Point Distribution in X, Y, Z Directions')
+plt.ylabel('Value')
+plt.show()
+
+
+import pandas as pd
+import numpy as np
+
+# Assuming you have a list of point cloud arrays
+point_clouds = glob.glob('/home/dim26fa/data/simulated_dna_origami/pyramid/*') # Example list of 5 point clouds
+
+# Convert each point cloud to a DataFrame and add an identifier
+dfs = []
+for idx, pc in enumerate(point_clouds, start=1):
+    df = pd.read_csv(pc)
+    df['Point Cloud'] = f'Cloud {idx}'
+    dfs.append(df)
+
+# Combine into a single DataFrame
+combined_df = pd.concat(dfs, ignore_index=True)
+
+sns.set(style="darkgrid", palette="colorblind")
+
+# Plotting histograms for X, Y, Z directions for all point clouds
+plt.figure(figsize=(18, 5))
+
+for i, direction in enumerate(['x', 'y', 'z'], start=1):
+    plt.subplot(1, 3, i)
+    sns.histplot(data=combined_df, x=direction, hue='Point Cloud', kde=True, element='step', palette='colorblind', legend=False)
+    plt.title(f'Distribution of Points in {direction} Direction')
+
+plt.show()

@@ -5,6 +5,7 @@ import open3d as o3d
 
 CD = ChamferDistance()
 
+
 def cd_loss_l1(pcs1, pcs2):
     """
     L1 Chamfer Distance.
@@ -20,6 +21,7 @@ def cd_loss_l1(pcs1, pcs2):
     dist2 = torch.sqrt(dist2)
     return (torch.mean(dist1) + torch.mean(dist2)) / 2.0
 
+
 def l1_cd(pcs1, pcs2):
     #loss = ChamferDistanceL1()
     #dist1, dist2 = loss(pcs1, pcs2)
@@ -28,6 +30,7 @@ def l1_cd(pcs1, pcs2):
     dist2 = torch.mean(torch.sqrt(dist2), 1)
     return torch.sum(dist1 + dist2) / 2
 
+
 def l2_cd(pcs1, pcs2):
     #loss = ChamferDistanceL1()
     #dist1, dist2 = loss(pcs1, pcs2)
@@ -35,6 +38,7 @@ def l2_cd(pcs1, pcs2):
     dist1 = torch.mean(dist1, dim=1)
     dist2 = torch.mean(dist2, dim=1)
     return torch.sum(dist1 + dist2)
+
 
 def cd_loss_l2(pcs1, pcs2):
     """
@@ -48,6 +52,7 @@ def cd_loss_l2(pcs1, pcs2):
     #dist1, dist2 = loss(pcs1, pcs2)
     dist1, dist2 = CD(pcs1, pcs2)
     return torch.mean(dist1) + torch.mean(dist2)
+
 
 def f_score(pred, gt, th=0.01):
     """
@@ -67,3 +72,11 @@ def f_score(pred, gt, th=0.01):
     recall = float(sum(d < th for d in dist2)) / float(len(dist2))
     precision = float(sum(d < th for d in dist1)) / float(len(dist1))
     return 2 * recall * precision / (recall + precision) if recall + precision else 0
+
+
+def mlp_loss_function(label, out_mlp):
+    criterion = torch.nn.BCELoss()
+    # batch_size = out_mlp.shape[0]
+    targets = label.reshape(-1, 1)
+    mean_loss = criterion(out_mlp.type(torch.float), targets.type(torch.float))
+    return mean_loss
