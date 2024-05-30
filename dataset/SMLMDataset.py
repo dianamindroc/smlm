@@ -123,7 +123,7 @@ class Dataset(DS):
 
     def _remove_corners(self, point_cloud):
         import hdbscan
-        clusterer = hdbscan.HDBSCAN(min_cluster_size=20, min_samples=None, algorithm='best', alpha=0.7,metric='euclidean')
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=20, min_samples=None, algorithm='best', alpha=0.7, metric='euclidean')
         cluster_labels = clusterer.fit_predict(point_cloud)
         n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
         p_remove_cluster = 0.5

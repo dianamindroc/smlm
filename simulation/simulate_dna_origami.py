@@ -177,3 +177,30 @@ class SMLMDnaOrigami:
         self.plot_singular_structure(model_structure, 'red')
         for origami in dna_origami:
             self.plot_singular_structure(origami)
+
+def _remove_corners(point_cloud):
+    import hdbscan
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=20, min_samples=None, algorithm='best', alpha=0.7,
+                                metric='euclidean')
+    cluster_labels = clusterer.fit_predict(point_cloud)
+    n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
+    p_remove_cluster = 0.5
+
+    if np.random.rand() < p_remove_cluster and n_clusters > 0:
+        # Exclude noise label (-1) from the list of unique labels if it exists
+        unique_clusters = set(cluster_labels)
+        if -1 in unique_clusters:
+            unique_clusters.remove(-1)
+        unique_clusters = list(unique_clusters)
+
+        # Randomly select a cluster to remove
+        cluster_to_remove = np.random.choice(unique_clusters)
+
+        # Create a mask for points to keep
+        mask = cluster_labels != cluster_to_remove
+
+        # Apply the mask to keep only the points that are not in the selected cluster
+        partial_pc = point_cloud[mask]
+        return partial_pc
+    else:
+        return point_cloud

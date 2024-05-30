@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+
 class PCN(nn.Module):
     """
     "PCN: Point Cloud Completion Network"
@@ -16,12 +17,14 @@ class PCN(nn.Module):
         num_coarse: 1024
     """
 
-    def __init__(self, num_dense=16384, latent_dim=1024, grid_size=4):
+    def __init__(self, num_dense=16384, latent_dim=1024, grid_size=4, classifier=False, num_classes=2):
         super().__init__()
 
         self.num_dense = num_dense
         self.latent_dim = latent_dim
         self.grid_size = grid_size
+        self.classifier = classifier
+        self.num_classes = num_classes
 
         assert self.num_dense % self.grid_size ** 2 == 0
 
@@ -65,37 +68,43 @@ class PCN(nn.Module):
 
         self.folding_seed = torch.cat([a, b], dim=0).view(1, 2, self.grid_size ** 2).cuda()  # (1, 2, S)
 
-        ### MLP for binary classification
-        # self.mlp1 = nn.Linear(self.latent_dim, int(self.latent_dim/2))
-        # self.bn1_mlp = nn.BatchNorm1d(int(self.latent_dim/2))
-        # self.mlp2 = nn.Linear(int(self.latent_dim/2), int(self.latent_dim/4))
-        # self.bn2_mlp = nn.BatchNorm1d(int(self.latent_dim/4))
-        # self.mlp3 = nn.Linear(int(self.latent_dim/4), 1)
-        # #self.bn3_mlp = nn.BatchNorm1d(1)
-        # self.sigmoid_mlp = nn.Sigmoid()
+        if self.classifier:
+            #MLP for binary classification
+            self.mlp1 = nn.Linear(self.latent_dim, int(self.latent_dim/2))
+            self.bn1_mlp = nn.BatchNorm1d(int(self.latent_dim/2))
+            self.mlp2 = nn.Linear(int(self.latent_dim/2), int(self.latent_dim/4))
+            self.bn2_mlp = nn.BatchNorm1d(int(self.latent_dim/4))
+            self.mlp3 = nn.Linear(int(self.latent_dim/4), self.num_classes)
+            # self.bn3_mlp = nn.BatchNorm1d(1)
+            self.sigmoid_mlp = nn.Sigmoid()
 
-    def mlp_classification(self, z): #icetin: mlp part that is connected to z
-        out_mlp = F.relu(self.bn1_mlp(self.mlp1(z))) # input: z output: prediction
-        out_mlp = F.relu(self.bn2_mlp(self.mlp2(out_mlp)))
-        out_mlp = self.sigmoid_mlp(self.mlp3(out_mlp))
-        return out_mlp
+    def mlp_classification(self, z):  # icetin: mlp part that is connected to z
+       if self.classifier:
+           out_mlp = F.relu(self.bn1_mlp(self.mlp1(z)))  # input: z output: prediction
+           out_mlp = F.relu(self.bn2_mlp(self.mlp2(out_mlp)))
+           out_mlp = self.mlp3(out_mlp)
+           return out_mlp
+       else:
+           return None
 
     def forward(self, xyz):
         B, _, N = xyz.shape
 
         # encoder
-        #feature = self.first_conv(xyz.transpose(2, 1))  # (B,  256, N)
+        # feature = self.first_conv(xyz.transpose(2, 1))  # (B,  256, N)
         feature = self.first_conv(xyz)  # (B,  256, N)
         feature_global = torch.max(feature, dim=2, keepdim=True)[0]  # (B,  256, 1)
         feature = torch.cat([feature_global.expand(-1, -1, N), feature], dim=1)  # (B,  512, N)
         feature = self.second_conv(feature)  # (B, 1024, N)
         feature_global_return = torch.max(feature, dim=2, keepdim=False)[0]  # (B, 1024)
 
-        #classifier
-        #out_classifier = self.mlp_classification(feature_global_return)
+        # classifier
+        if self.classifier:
+            out_classifier = self.mlp_classification(feature_global_return)
 
         # decoder
-        coarse = self.mlp(feature_global_return).reshape(-1, self.num_coarse, 3)  # (B, num_coarse, 3), coarse point cloud
+        coarse = self.mlp(feature_global_return).reshape(-1, self.num_coarse, 3)
+        # (B, num_coarse, 3), coarse point cloud
         point_feat = coarse.unsqueeze(2).expand(-1, -1, self.grid_size ** 2, -1)  # (B, num_coarse, S, 3)
         point_feat = point_feat.reshape(-1, self.num_dense, 3).transpose(2, 1)  # (B, 3, num_fine)
 
@@ -107,4 +116,8 @@ class PCN(nn.Module):
 
         fine = self.final_conv(feat) + point_feat  # (B, 3, num_fine), fine point cloud
 
-        return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return #, out_classifier
+        if self.classifier:
+            return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return, out_classifier
+        else:
+            return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return
+

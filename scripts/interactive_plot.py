@@ -40,12 +40,13 @@ pio.templates["custom_dark"] = go.layout.Template(
 # Set the default template to the custom one
 pio.templates.default = 'custom_dark'
 # Define the folder containing your .ply files
-folder_path = '/home/dim26fa/coding/training/logs_pcn_20240409_111553/'
+folder_path = '/home/dim26fa/coding/testing/logs_pcn_20240420_125232/input/'
 
 # List all .ply files in the folder
 ply_files = [f for f in os.listdir(folder_path) if f.endswith('.ply')]
 pred_dfs = {}
 gt_dfs = {}
+input_dfs = {}
 
 # Process files and convert to pandas DataFrame
 for file_name in ply_files:
@@ -66,6 +67,14 @@ for file_name in ply_files:
         clusterer = hdbscan.HDBSCAN(min_cluster_size=10, min_samples=2)
         cluster_labels_gt = clusterer.fit_predict(gt_dfs[identifier][['x', 'y', 'z']])
         gt_dfs[identifier]['cluster_label'] = cluster_labels_gt
+    elif 'input' in file_name:
+        identifier = file_name.split('_input')[0]
+        file_path = os.path.join(folder_path, file_name)
+        point_cloud = o3d.io.read_point_cloud(file_path)
+        input_dfs[identifier] = pd.DataFrame(point_cloud.points, columns=['x', 'y', 'z']).drop_duplicates()
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=10, min_samples=2)
+        cluster_labels_input = clusterer.fit_predict(input_dfs[identifier][['x', 'y', 'z']])
+        input_dfs[identifier]['cluster_label'] = cluster_labels_input
 
 # Initialize the list to hold the pairs
 datasets = []
@@ -76,16 +85,20 @@ for identifier in pred_dfs.keys():
     if identifier in gt_dfs:
         pred_df = pred_dfs[identifier]
         gt_df = gt_dfs[identifier]
-        datasets.append((pred_df, gt_df))
+        input_df = input_dfs[identifier]
+        datasets.append((pred_df, gt_df, input_df))
 
+cols = 1
+rows = 1
 # Setup for a 2x5 grid of 3D scatter plots
-fig = make_subplots(rows=1, cols=3,
-                    specs=[[{'type': 'scatter3d'} for _ in range(3)] for _ in range(1)],
+fig = make_subplots(rows=rows, cols=cols,
+                    specs=[[{'type': 'scatter3d'} for _ in range(cols)] for _ in range(rows)],
                     horizontal_spacing=0.02, vertical_spacing=0.1)
 
-for i, (pred, gt) in enumerate(datasets[6:9]):
-    row = (i // 3) + 1  # Determine row for subplot
-    col = (i % 3) + 1  # Determine column for subplot
+for i, dataset in enumerate(datasets):
+    pred, gt, input = dataset
+    row = (i // cols) + 1  # Determine row for subplot
+    col = (i % cols) + 1  # Determine column for subplot
 
     fig.add_trace(
         go.Scatter3d(
@@ -93,7 +106,7 @@ for i, (pred, gt) in enumerate(datasets[6:9]):
             y=pred['y'],
             z=pred['z'],
             mode='markers',
-            marker=dict(size=2, color='#7030A0', opacity=0.5),
+            marker=dict(size=2, color='darkturquoise', opacity=0.5),
             name=f'predicted_{i}'
         ),
         row=row, col=col
@@ -140,8 +153,51 @@ for i, (pred, gt) in enumerate(datasets[6:9]):
         ),
         row=row, col=col
     )
+    ###########
+    fig.add_trace(
+        go.Scatter3d(
+            x=input['x'],
+            y=input['y'],
+            z=input['z'],
+            mode='markers',
+            marker=dict(size=2, color='white', opacity=0.5),
+            name=f'input_{i}'
+        ),
+        row=row, col=col
+    )
+    centers_of_mass_input = input.groupby('cluster_label').mean().reset_index()
+
+    fig.add_trace(
+        go.Scatter3d(
+            x=centers_of_mass_input['x'],
+            y=centers_of_mass_input['y'],
+            z=centers_of_mass_input['z'],
+            mode='markers+text',
+            marker=dict(size=7, color='white', symbol='diamond', opacity=0.7),
+            text=centers_of_mass_input['cluster_label'],
+            textposition='top center',
+            name=f'Center of Mass_input_{i}'
+        ),
+        row=row, col=col
+    )
+
+num_scenes = 10
+
+# Dynamically generate layout configuration for each scene
+layout_update = {}
+for i in range(1, num_scenes + 1):
+    scene_key = f'scene{i}'
+    layout_update[scene_key] = {
+        'xaxis': {'title_font': {'size': 4}, 'showticklabels': False},
+        'yaxis': {'title_font': {'size': 4}, 'showticklabels': False},
+        'zaxis': {'title_font': {'size': 4}, 'showticklabels': False}
+    }
+
+# Apply the layout update to the figure
+fig.update_layout(**layout_update)
+
 # Show the figure
 fig.show()
 
 
-py.plot(fig, filename = 'test1', auto_open=True)
+py.plot(fig, filename = 'averaged', auto_open=True)

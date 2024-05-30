@@ -513,3 +513,169 @@ for i, direction in enumerate(['x', 'y', 'z'], start=1):
     plt.title(f'Distribution of Points in {direction} Direction')
 
 plt.show()
+
+import os
+import pandas as pd
+
+appends = ['5nm_cube', '10nm_cube', '20nm_cube', '5nm_pyramid', '10nm_pyramid', '20nm_pyramid']
+for app in appends:
+    path = '/home/dim26fa/data/dna_origami_one_sample512/test/partial/all'
+#path = '/home/dim26fa/data/sim_dna_multiple_sizes_shapenet_version/test/partial/all'
+    pcs = [os.path.join(path, entry) for entry in os.listdir(path) if entry.endswith('.csv')]
+    pcs_array = [pd.read_csv(pc) for pc in pcs]
+    partial_pcs = [_remove_corners(pc) for pc in pcs_array]
+    for i, pc in enumerate(partial_pcs):
+        pathh = '/home/dim26fa/data/dna_origami_one_sample512/test/partial/all/smlm_sample'
+        pc.to_csv(pathh + str(i) + '.csv', index=False)
+
+import h5py
+appends = ['0', '1', '2', '3', '4', '5']
+for app in appends:
+    path = '/home/dim26fa/data/sim_dna_multiple_sizes_shapenet_version/val/gt/' + app
+    path = '/home/dim26fa/data/dna_origami_one_sample512/test/partial/all'
+    pcs = [os.path.join(path, entry) for entry in os.listdir(path) if entry.endswith('.csv')]
+    for i, pc in enumerate(pcs):
+        df = pd.read_csv(pc)
+        structured_array = np.array(df)
+        num_points_needed = 2048- structured_array.shape[0]
+        if num_points_needed > 0:
+            # Select random indices from the point cloud to duplicate
+            indices_to_duplicate = np.random.choice(structured_array.shape[0], num_points_needed, replace=True)
+            duplicated_points = structured_array[indices_to_duplicate]
+
+            # Concatenate the original point cloud with the duplicated points
+            padded_point_cloud = np.vstack((structured_array, duplicated_points))
+        else:
+            padded_point_cloud = structured_array
+
+        # Create a mask indicating original points with ones and duplicated points with zeros
+
+        pathh = '/home/dim26fa/data/dna_origami_one_sample2048/test/partial/all/'
+        #df.to_hdf(pathh + str(i) + '_hdf.h5', key='data')
+        with h5py.File(pathh + str(i) + '_hdf.h5', 'w') as file:
+            # Create a dataset directly under the root of the HDF5 file
+            file.create_dataset('data', data=padded_point_cloud)
+
+folder_path = '/home/dim26fa/data/dna_origami_one_sample512/train/gt'
+# Specify the path for the output text file
+output_file_path = '/home/dim26fa/data/dna_origami_one_sample512/train/filenames.txt'
+
+parent_folder_name = os.path.basename(folder_path)
+
+with open(output_file_path, 'w') as file:
+    # List all files in the directory
+    for filename in os.listdir(folder_path):
+        # Check if the file has the .h5 extension
+        if filename.endswith('.h5'):
+            # Remove the file extension
+            filename_without_suffix, _ = os.path.splitext(filename)
+            # Append parent folder name to filename
+            full_filename = f"{parent_folder_name}/{filename_without_suffix}"
+            # Write each full filename to the text file, followed by a newline
+            file.write(full_filename + '\n')
+
+with open(output_file_path, 'w') as file:
+    # Iterate over each directory within the parent folder
+    for folder_name in os.listdir(folder_path):
+        # Construct the path to the subfolder
+        _path = os.path.join(folder_path, folder_name)
+        if os.path.isdir(_path):  # Check if it's a directory
+            # List all files in the subfolder
+            for filename in os.listdir(_path):
+                # Check if the file has the .h5 extension
+                if filename.endswith('.h5'):
+                    # Remove the file extension
+                    filename_without_suffix, _ = os.path.splitext(filename)
+                    # Create the entry to write, including subfolder name and filename without suffix
+                    entry = f"{folder_name}/{filename_without_suffix}"
+                    # Write each entry to the text file, followed by a newline
+                    file.write(entry + '\n')
+
+root_dir = '/home/dim26fa/data/dna_origami_one_sample512/test/partial/all'
+
+# Initialize the maximum length variable
+max_length = 0
+
+# Loop through each sub-folder in the root directory
+for folder_name in os.listdir(root_dir):
+    folder_path = os.path.join(root_dir, folder_name)
+    if os.path.isdir(folder_path):  # Check if it's a directory
+        # Loop through each file in the sub-folder
+        for file_name in os.listdir(folder_path):
+            if file_name.endswith('.csv'):  # Make sure to process only CSV files
+                file_path = os.path.join(folder_path, file_name)
+                # Read the CSV file
+                df = pd.read_hdf(file_path)
+                # Update the maximum length if the current one is larger
+                if len(df) > max_length:
+                    max_length = len(df)
+
+# Print the result
+print(f"The maximum number of rows in any CSV file is: {max_length}")
+
+
+
+### Scatter plot 3D with matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
+
+# Sample data
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+# Scatter plot
+ax.scatter(df['x'], df['y'], df['z'])
+
+# Labels
+ax.set_xlabel('X Coordinate')
+ax.set_ylabel('Y Coordinate')
+ax.set_zlabel('Z Coordinate')
+
+plt.show()
+
+
+def plot_html(df):
+    import plotly.graph_objects as go
+
+    # Sample data
+    x = df['x']
+    y = df['y']
+    z = df['z']
+
+    # Create a 3D scatter plot
+    fig = go.Figure(data=[go.Scatter3d(
+        x=x,
+        y=y,
+        z=z,
+        mode='markers',
+        marker=dict(
+            size=3,
+            color=z,                # Set color to z coordinate values for gradient effect
+            colorscale='Viridis',   # Choose a colorscale
+            opacity=0.8
+        )
+    )])
+
+    # Update layout for a better look
+    fig.update_layout(
+        title='Interactive 3D Scatter Plot',
+        scene=dict(
+            xaxis_title='X Axis',
+            yaxis_title='Y Axis',
+            zaxis_title='Z Axis'
+        ),
+        autosize=False,
+        width=700,
+        height=700,
+        margin=dict(l=65, r=50, b=65, t=90)
+    )
+
+    fig.show()
+    fig.write_html('/home/dim26fa/coding/smlm/plot.html')
+
+
+#TODO: check npcs from heydarian - how they look
+#TODO: try out heydarian script with dna origami
+

@@ -26,4 +26,4 @@ test:
   ignore_zeros: False
   augmentation: True
   save: True
-  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240306_123851/best_l1_cd.pth'
+  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240308_164948/best_l1_cd.pth'

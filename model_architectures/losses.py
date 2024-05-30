@@ -75,8 +75,8 @@ def f_score(pred, gt, th=0.01):
 
 
 def mlp_loss_function(label, out_mlp):
-    criterion = torch.nn.BCELoss()
-    # batch_size = out_mlp.shape[0]
-    targets = label.reshape(-1, 1)
-    mean_loss = criterion(out_mlp.type(torch.float), targets.type(torch.float))
+    criterion = torch.nn.CrossEntropyLoss()
+    # Ensure labels are in the correct shape and type
+    targets = label.long()
+    mean_loss = criterion(out_mlp, targets)
     return mean_loss

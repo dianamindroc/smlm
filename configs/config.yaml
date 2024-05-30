@@ -1,17 +1,17 @@
 dataset:
-
-  root_folder: '/home/dim26fa/data/simulated_dna_origami_anisotropy/'
+  root_folder: '/home/dim26fa/data/simulated_dna_origami_multiple_sizes/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
   remove_part_prob: 0.4
   dataset_type: 'tetra'
   remove_corners: False
+  remove_corners_prob: 0.5
   anisotropy: True
   anisotropy_factor: 2.0
   anisotropy_axis: 'z'
-  remove_corners: True
   initial_alpha: 1.0
+  number_classes: 6
 model: 'pcn'
 train:
   lr: 0.001
@@ -33,6 +33,10 @@ train:
   initial_alpha: 0.01
   loss1_improvement_threshold: 30
   min_improvement_epochs: 10
+  classifier: True
+  pretrained: False
+  ckpt: ''
+  autoencoder: True
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

@@ -1,10 +1,13 @@
 import os
 import argparse
+from pathlib import Path
 
 import numpy as np
 import open3d as o3d
 import torch
 import torch.utils.data as Data
+import pandas as pd
+
 
 from model_architectures import pcn
 from dataset.ShapeNet import ShapeNet
@@ -16,6 +19,69 @@ from model_architectures.transforms import ToTensor, Padding
 from dataset.SMLMDataset import Dataset
 from helpers.data import get_highest_shape
 
+from model_architectures.pcn_decoder import PCNDecoderOnly
+
+ckpt = torch.load('/home/dim26fa/coding/training/logs_pcn_20240530_104740/best_l1_cd.pth')
+model = pcn.PCN(classifier=True)
+model.load_state_dict(ckpt)
+decoder = PCNDecoderOnly(model)
+final_conv_state_dict = model.final_conv.state_dict()
+decoder.final_conv.load_state_dict(final_conv_state_dict)
+data = np.load('saved_arrays.npz')
+loaded_arrays = [data[f'arr_{i}'] for i in range(len(data.files))]
+indices = [121, 130, 132, 135, 136, 140, 142, 145, 150, 151]
+indices = [29, 30, 31, 32, 33, 34, 35, 36, 40, 77]
+extract = [feat_aug[index] for index in indices]
+tensor_vectors = torch.tensor(extract)
+avg_feat = tensor_vectors.mean(dim=0)
+average_vector = avg_feat.unsqueeze(0)
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+decoder.to(device)
+average_vector = average_vector.to(device)
+with torch.no_grad():  # Ensure no gradients are computed during inference
+    coarse_output, fine_output = decoder(average_vector)
+fine = fine_output[0].detach().cpu().numpy()
+pcd = o3d.geometry.PointCloud()
+pcd.points = o3d.utility.Vector3dVector(fine)
+o3d.visualization.draw_geometries([pcd])
+pc1 = o3d.io.read_point_cloud('/home/dim26fa/coding/testing/logs_pcn_20240420_125232/121_input.ply')
+o3d.visualization.draw_geometries([pc1])
+
+def load_model(model_path, device):
+    """ Load the trained model from a specified path. """
+    model = pcn.PCN(num_dense=16384, latent_dim=1024, grid_size=4, classifier=True).to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+    return model
+
+def setup_transformations(highest_shape):
+    """ Set up data transformations. """
+    return transforms.Compose([
+        Padding(highest_shape),  # Assuming Padding and ToTensor are defined elsewhere as in training script
+        ToTensor()
+    ])
+
+def load_dataset(root_folder, classes, suffix, transform, anisotropy=False):
+    """ Load and return the dataset. """
+    return Dataset(root_folder=root_folder, suffix=suffix, transform=transform, classes_to_use=classes, anisotropy=anisotropy)
+
+def infer_dataset(dataset, model, device):
+    """ Run inference on the dataset and return the results. """
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    predictions = []
+    with torch.no_grad():
+        for i, data in enumerate(dataloader):
+            inputs = data['partial_pc'].to(device)
+            inputs = inputs.permute(0, 2, 1)  # Adjust dimensions as per model input requirement
+            outputs = model(inputs)
+            predictions.append(outputs)
+    return predictions
+
+def save_predictions(predictions, output_dir):
+    """ Save predictions to a specified directory. """
+    df = pd.DataFrame(predictions)
+    df.to_csv(Path(output_dir) / "predictions.csv", index=False)
 
 
 def export_ply(filename, points):
@@ -104,6 +170,7 @@ def test(config, save=True):
     avg_l1_cd, avg_l2_cd, feature_space, labels_array = test_single_category(model, device, test_config, log_dir, save)
     print('\033[32m{:20s}{:20.4f}{:20.4f}\033[0m'.format('All', avg_l1_cd * 1e3, avg_l2_cd * 1e4))
     return avg_l1_cd, avg_l2_cd, feature_space, labels_array
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Point Cloud Completion Testing')

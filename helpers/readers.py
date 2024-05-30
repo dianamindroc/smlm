@@ -194,6 +194,27 @@ class ReaderIMODfiles:
                 save_path = os.path.join(self.path_folder, name)
                 df.to_csv(save_path, index=False)
 
+def convert_ply_to_csv(path, save = False):
+    import open3d as o3d
+    pcs = []
+    #check if path is file or folder
+    if os.path.isdir(path):
+        for file in os.listdir(path):
+            pc = o3d.io.read_point_cloud(os.path.join(path, file))
+            df = pd.DataFrame(pc.points)
+            if save:
+                df.to_csv(os.path.join(path, file.split('.')[0] + '.csv'), index=False)
+            else:
+                pcs.append(df)
+        return pcs
+    else:
+        pc = o3d.io.read_point_cloud(path)
+        df = pd.DataFrame(pc.points)
+        if save:
+            df.to_csv(path.split('.')[0]+'.csv', index=False)
+        else:
+            return df
+
 
 
 
