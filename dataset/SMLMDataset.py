@@ -180,13 +180,12 @@ class Dataset(DS):
         else:
             raise NotImplementedError("This label is not included in the current dataset.")
 
-
-        if self.data_augmentation:
+            #       if self.data_augmentation:
             #theta = np.random.uniform(0, np.pi * 2)
             #rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
             #arr[:, [0, 2]] = arr[:, [0, 2]].dot(rotation_matrix)  # random rotation
             #arr += np.random.normal(0, 0.02, size=arr.shape)  # random jitter
-            arr = self._rotate_data(arr)
+            #   arr = self._rotate_data(arr)
         if self.anisotropy:
             arr_anisotropy = self._add_anisotropy(arr, self.anisotropy_factor, self.anisotropy_axis)
         else:
@@ -196,7 +195,10 @@ class Dataset(DS):
             partial_arr = self._remove_points(arr)
 
         if self.remove_corners:
-            partial_arr = self._remove_corners(arr)
+            if self.anisotropy:
+                partial_arr = self._remove_corners(arr_anisotropy)
+            else:
+                partial_arr = self._remove_corners(arr)
 
         if self.remove_outliers:
             arr = self._remove_outliers(arr)

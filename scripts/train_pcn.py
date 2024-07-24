@@ -31,6 +31,7 @@ warnings.filterwarnings("ignore")
 
 
 def train(config, exp_name=None, fixed_alpha=None):
+    global total_cd_l1
     set_seed(42)
     wandb.login()
     torch.backends.cudnn.benchmark = True
@@ -40,7 +41,7 @@ def train(config, exp_name=None, fixed_alpha=None):
         "batch_size": config.train.batch_size,
         "num_workers": config.train.num_workers,
         "num_epochs": config.train.num_epochs,
-        #"cd_loss": ChamferDistance(),
+        "loss": config.train.loss,
         "early_stop_patience": config.train.early_stop_patience,
         'momentum': config.train.momentum,
         'momentum2': config.train.momentum2,
@@ -60,7 +61,11 @@ def train(config, exp_name=None, fixed_alpha=None):
         'anisotropy_axis': config.dataset.anisotropy_axis,
         'classifier': config.train.classifier,
         'ckpt': config.train.ckpt,
-        'autoencoder': config.train.autoencoder
+        'autoencoder': config.train.autoencoder,
+        'lambda_reg': config.train.lambda_reg,
+        'alpha_density': config.train.alpha_density,
+        'beta_sparsity': config.train.beta_sparsity,
+        'channels': config.train.channels
     }
     log_dir = create_log_folder(config.train.log_dir, config.model)
     print('Loading Data...')
@@ -94,7 +99,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                                suffix=suffix,
                                transform=pc_transforms,
                                classes_to_use=classes,
-                               data_augmentation=True,
+                               data_augmentation=False,
                                remove_part_prob = train_config['remove_part_prob'],
                                remove_corners = train_config['remove_corners'],
                                remove_outliers = False,
@@ -115,7 +120,7 @@ def train(config, exp_name=None, fixed_alpha=None):
 
     # model
     model = pcn.PCN(num_dense=16384, latent_dim=1024, grid_size=4, classifier=train_config['classifier'],
-                    num_classes=config.dataset.number_classes).to(device)
+                    num_classes=config.dataset.number_classes, in_channels=train_config['channels']).to(device)
 
     # optimizer_recon
     #optimizer_recon = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(0.9, 0.999))
@@ -180,7 +185,7 @@ def train(config, exp_name=None, fixed_alpha=None):
         if fixed_alpha is not None:
             alpha = fixed_alpha
         else:
-            adjust_alpha(epoch, changed_lr, train_config, optimizer_recon)
+            alpha = adjust_alpha(epoch)
 
         # training
         model.train()
@@ -192,9 +197,12 @@ def train(config, exp_name=None, fixed_alpha=None):
         #### SMLMDataset
         for i, data in enumerate(train_dataloader):
             c = data['pc']
+            c = c[:, :, :3]
             p = data['partial_pc']
+            p = p[:, :, :3]
             c_anisotropic = data['pc_anisotropic']
-            mask_complete = data['pc_mask']
+            c_anisotropic = c_anisotropic[:, :, :3]
+            #mask_complete = data['pc_mask']
             label = data['label']
             if train_config['autoencoder']:
                 c_per = c.permute(0, 2, 1)
@@ -214,28 +222,53 @@ def train(config, exp_name=None, fixed_alpha=None):
                 coarse_pred, dense_pred, _, out_classifier = model(p)
 
             # loss function
-            loss1 = losses.cd_loss_l1(coarse_pred, c)
-            loss2 = losses.cd_loss_l1(dense_pred, c)
+            if train_config['loss'] == 'dcd':
+                # Compute DCD loss for both coarse and dense predictions
+                dcd_loss1, cd_p1, cd_t1 = losses.calc_dcd(coarse_pred, c)
+                dcd_loss2, cd_p2, cd_t2 = losses.calc_dcd(dense_pred, c)
+                loss = dcd_loss1.mean() + alpha * dcd_loss2.mean()
+            elif train_config['loss'] == 'adapted':
+                from model_architectures.losses import _compute_density, _with_density, _sparsity_regularization, safe_normalize
+                loss1 = losses.cd_loss_l1(coarse_pred, c)
+                loss2 = losses.cd_loss_l1(dense_pred, c)
+                cd_loss = loss1 + alpha * loss2
+                density_pred = _compute_density(dense_pred)
+                density_gt = _compute_density(c)
+                density_loss = _with_density(dense_pred, c, density_pred, density_gt)
+                sparsity_loss = torch.tensor(_sparsity_regularization(dense_pred, train_config['lambda_reg']))
+                loss = cd_loss + train_config['alpha_density'] * density_loss + train_config['beta_sparsity'] * sparsity_loss
+                #print(f'CD Loss: {cd_loss}, Density Loss: {density_loss}, Sparsity Loss: {sparsity_loss}')
+            elif train_config['loss'] == 'own_dcd':
+                from model_architectures.losses import DensityAwareChamferLoss
+                density_aware_chamfer_loss = DensityAwareChamferLoss()
+                loss = density_aware_chamfer_loss(dense_pred, c)
+            else:
+                loss1 = losses.cd_loss_l1(coarse_pred, c)
+                loss2 = losses.cd_loss_l1(dense_pred, c)
+                loss = loss1 + alpha * loss2
+
             if train_config['classifier']:
                 label = label.to(torch.long)
                 mlp_loss = losses.mlp_loss_function(label, out_classifier)
                 optimizer_mlp.zero_grad()
                 mlp_loss.backward(retain_graph=True)
                 optimizer_mlp.step()
-                print(F.softmax(out_classifier, dim=0))
-            loss = loss1 + alpha * loss2
-
+                #print(F.softmax(out_classifier, dim=0))
 
             # back propagation
             loss.backward()
-            # class_loss.backward()
             optimizer_recon.step()
             train_step += 1
+
         print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
                                                                                  loss * 1e3))
+
         wandb.log({'train_l1_cd': loss * 1e3})
         wandb.log({'alpha': alpha})
         export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), dense_pred[0].detach().cpu().numpy())
+        if train_config['loss'] == 'adapted':
+            del p, c, coarse_pred, dense_pred, cd_loss, density_pred, density_gt, loss, density_loss, sparsity_loss
+        torch.cuda.empty_cache()
         #export_ply(os.path.join(log_dir, '{:03d}.ply'.format(i)), np.transpose(dense_pred[0].detach().cpu().numpy(), (1,0)))
         #lr_schedual.step()
 
@@ -255,8 +288,11 @@ def train(config, exp_name=None, fixed_alpha=None):
             #### SMLMDataset
             for i, data in enumerate(val_dataloader):
                 c = data['pc']
+                c = c[:, :, :3]
                 p = data['partial_pc']
+                p = p[:, :, :3]
                 c_anisotropic = data['pc_anisotropic']
+                c_anisotropic = c_anisotropic[:, :, :3]
                 mask_complete = data['pc_mask']
                 label = data['label']
                 if train_config['autoencoder']:
@@ -276,8 +312,9 @@ def train(config, exp_name=None, fixed_alpha=None):
                 labels_names.append(data['label_name'])
                 feature_space.extend(features.detach().cpu().numpy())
                 cd_loss = losses.l1_cd(dense_pred, c).item()
-                mlp_loss = losses.mlp_loss_function(label, out_classifier)
                 total_cd_l1 += cd_loss
+
+                mlp_loss = losses.mlp_loss_function(label, out_classifier)
                 if i == rand_iter:
                     if train_config['autoencoder']:
                         input_pc = c_anisotropic[0].detach().cpu().numpy()
@@ -290,9 +327,9 @@ def train(config, exp_name=None, fixed_alpha=None):
                     export_ply(os.path.join(log_dir, '{:03d}_output.ply'.format(epoch)), output_pc)
                     export_ply(os.path.join(log_dir, '{:03d}_gt.ply'.format(epoch)), gt)
                     wandb.log({"point_cloud_val (gt, input, pred)":
-                                   [wandb.Object3D(gt),
-                                    wandb.Object3D(input_pc),
-                                    wandb.Object3D(output_pc)]})
+                                   [wandb.Object3D(gt[:,:3]),
+                                    wandb.Object3D(input_pc[:,:3]),
+                                    wandb.Object3D(output_pc[:,:3])]})
 
             total_cd_l1 /= len(val_dataset)
             if train_config['scheduler_type'] != 'None':
@@ -329,7 +366,7 @@ def train(config, exp_name=None, fixed_alpha=None):
 
 def export_ply(filename, points):
     pc = o3d.geometry.PointCloud()
-    pc.points = o3d.utility.Vector3dVector(points)
+    pc.points = o3d.utility.Vector3dVector(points[:, :3])
     o3d.io.write_point_cloud(filename, pc, write_ascii=True)
 
 
@@ -356,22 +393,18 @@ def plot_tsne(features, labels, labels_names, epoch, log_dir):
      # Close the figure to free memory
     plt.close()
 
-def adjust_alpha(epoch, changed_lr, train_config, optimizer):
+
+def adjust_alpha(epoch):
     # DOES NOT WORK YET
     if epoch < 120:
         alpha = 0.01
-    elif epoch < 200 and changed_lr == False:
+    elif epoch < 200:
         alpha = 0.1
-        optimizer.param_groups[0]['lr'] = train_config['lr']
-        changed_lr = True
-    elif epoch < 300 and changed_lr == False:
+    elif epoch < 300:
         alpha = 0.5
-        optimizer.param_groups[0]['lr'] = train_config['lr']
-        changed_lr = True
-    elif changed_lr == False:
+    else:
         alpha = 1.0
-        optimizer.param_groups[0]['lr'] = train_config['lr']
-        changed_lr = True
+    return alpha
 
 
 if __name__ == '__main__':

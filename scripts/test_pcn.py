@@ -21,19 +21,21 @@ from helpers.data import get_highest_shape
 
 from model_architectures.pcn_decoder import PCNDecoderOnly
 
-ckpt = torch.load('/home/dim26fa/coding/training/logs_pcn_20240530_104740/best_l1_cd.pth')
-model = pcn.PCN(classifier=True)
+ckpt = torch.load('/home/dim26fa/coding/training/logs_pcn_20240308_164948/best_l1_cd.pth')
+model = pcn.PCN(classifier=False)
 model.load_state_dict(ckpt)
 decoder = PCNDecoderOnly(model)
 final_conv_state_dict = model.final_conv.state_dict()
 decoder.final_conv.load_state_dict(final_conv_state_dict)
 data = np.load('saved_arrays.npz')
 loaded_arrays = [data[f'arr_{i}'] for i in range(len(data.files))]
-indices = [121, 130, 132, 135, 136, 140, 142, 145, 150, 151]
+indices = [121, 122, 123, 124, 125, 126, 127, 128, 129, 130]
 indices = [29, 30, 31, 32, 33, 34, 35, 36, 40, 77]
-extract = [feat_aug[index] for index in indices]
-tensor_vectors = torch.tensor(extract)
-avg_feat = tensor_vectors.mean(dim=0)
+feat_ = [elem[2] for elem in pred2]
+extract = [loaded_arrays[index] for index in indices]
+tensor_vectors = [torch.tensor(elem) for elem in extract]
+stacked_ = torch.stack(tensor_vectors)
+avg_feat = stacked_.mean(dim=0)
 average_vector = avg_feat.unsqueeze(0)
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 decoder.to(device)
@@ -44,7 +46,9 @@ fine = fine_output[0].detach().cpu().numpy()
 pcd = o3d.geometry.PointCloud()
 pcd.points = o3d.utility.Vector3dVector(fine)
 o3d.visualization.draw_geometries([pcd])
-pc1 = o3d.io.read_point_cloud('/home/dim26fa/coding/testing/logs_pcn_20240420_125232/121_input.ply')
+logs_pcn_20240311_153830
+logs_pcn_20240420_125232
+pc1 = o3d.io.read_point_cloud('/home/dim26fa/coding/testing/logs_pcn_20240311_153830/121_input.ply')
 o3d.visualization.draw_geometries([pc1])
 
 def load_model(model_path, device):
@@ -65,11 +69,12 @@ def load_dataset(root_folder, classes, suffix, transform, anisotropy=False):
     """ Load and return the dataset. """
     return Dataset(root_folder=root_folder, suffix=suffix, transform=transform, classes_to_use=classes, anisotropy=anisotropy)
 
-def infer_dataset(dataset, model, device):
+def infer_dataset(dataset, model):
     """ Run inference on the dataset and return the results. """
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     predictions = []
+    model = model.to(device)
     with torch.no_grad():
         for i, data in enumerate(dataloader):
             inputs = data['partial_pc'].to(device)
@@ -160,7 +165,23 @@ def test(config, save=True):
 
     # load pretrained model
     model = pcn.PCN(16384, 1024, 4).to(device)
-    model.load_state_dict(torch.load(test_config['ckpt_path']))
+    state_dict = torch.load(test_config['ckpt_path'])
+    if 'mlp3.weight' in state_dict.keys():
+        keys_to_remove = [
+            "mlp1.weight", "mlp1.bias",
+            "bn1_mlp.weight", "bn1_mlp.bias", "bn1_mlp.running_mean", "bn1_mlp.running_var",
+            "bn1_mlp.num_batches_tracked",
+            "mlp2.weight", "mlp2.bias",
+            "bn2_mlp.weight", "bn2_mlp.bias", "bn2_mlp.running_mean", "bn2_mlp.running_var",
+            "bn2_mlp.num_batches_tracked",
+            "mlp3.weight", "mlp3.bias"
+        ]
+
+        # Assuming `my_dict` is your dictionary-like structure
+        for key in keys_to_remove:
+            if key in state_dict:
+                del state_dict[key]
+    model.load_state_dict(state_dict)
     model.eval()
 
     print('\033[33m{:20s}{:20s}{:20s}\033[0m'.format('Category', 'L1_CD(1e-3)', 'L2_CD(1e-4)'))

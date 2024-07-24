@@ -4,13 +4,15 @@ import random
 import math
 import pandas as pd
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 class SMLMDnaOrigami:
-    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True, stats=None):
+    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True, stats=None, apply_rotation=True):
         self.struct_type = struct_type
         self.number_samples = number_dna_origami_samples
         self.dna_origami_list = []
         self.dna_origami = []
+        self.apply_rotation = apply_rotation
         if stats is not None:
             self.stats = stats
         if struct_type == 'cube':
@@ -28,6 +30,7 @@ class SMLMDnaOrigami:
             raise NotImplementedError("Only cube and pyramid supported at the moment :)")
         self.radius = int(input("What is the maximum radius in which to generate SMLM samples?"))
         self.number_localizations, self.percentage = [int(x) for x in input("How many localizations to generate around each center and with which variation (separate by space)?").split()]
+        self.uncertainty_factor = int(input("What is the uncertainty factor for the localizations?"))
         self.base_folder = input("Where to save the generated samples?")
         if save_model:
             self.save_model_structure()
@@ -107,8 +110,16 @@ class SMLMDnaOrigami:
             x = center[0] + r * math.sin(phi) * math.cos(theta)
             y = center[1] + r * math.sin(phi) * math.sin(theta)
             z = center[2] + r * math.cos(phi)
+            uncertainty_factor_xy = np.random.uniform(0, 0.15)
+            uncertainty_factor_z = np.random.uniform(0, 0.4)
+            uncertainty_x = abs(r * math.sin(phi) * math.cos(theta) * uncertainty_factor_xy)
+            uncertainty_y = abs(r * math.sin(phi) * math.sin(theta) * uncertainty_factor_xy)
+            uncertainty_z = abs(r * math.cos(phi) * uncertainty_factor_z)
 
-            points.append((x, y, z))
+            # Choose the maximum uncertainty as the point's overall uncertainty
+            overall_uncertainty_xy = np.average([uncertainty_x, uncertainty_y])
+
+            points.append((x, y, z, overall_uncertainty_xy, uncertainty_z))
         return points
 
     def generate_one_dna_origami_smlm(self):
@@ -126,11 +137,21 @@ class SMLMDnaOrigami:
             self.dna_origami.append(self.generate_points_3d(corner, radius, self.number_localizations, self.percentage))
             self.dna_origami_list.append(self.dna_origami)
 
+        return self.dna_origami_list
+
     def generate_all_dna_origami_smlm_samples(self):
         for i in range(self.number_samples):
+            if self.apply_rotation:
+                self.rotate_model()
             self.generate_one_dna_origami_smlm()
             self.save_samples(i)
             self.dna_origami = []
+
+    def rotate_model(self):
+        random_rotation = R.random()
+        rotated_model = random_rotation.apply(np.array(self.model_structure))
+        rotated_model = [tuple(corner) for corner in rotated_model]
+        self.model_structure = rotated_model
 
     def save_model_structure(self):
         df_model_structure = pd.DataFrame(self.model_structure, columns=['x', 'y', 'z'])
@@ -138,7 +159,7 @@ class SMLMDnaOrigami:
 
     def save_samples(self, index: int):
         flattened_list = [element for sublist in zip(*self.dna_origami) for element in sublist]
-        df_smlm_sample = pd.DataFrame(flattened_list, columns=['x', 'y', 'z'])
+        df_smlm_sample = pd.DataFrame(flattened_list, columns=['x', 'y', 'z', 'sigma_xy', 'sigmaz'])
         df_smlm_sample.to_csv(self.base_folder + '/smlm_sample' + str(index) + '.csv', index=False)
 
     @staticmethod

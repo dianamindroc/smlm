@@ -1,4 +1,5 @@
 # script with quick code snippets for testing purposes
+from plotly.subplots import make_subplots
 
 from helpers.readers import ReaderIMODfiles
 import os
@@ -144,8 +145,8 @@ import open3d as o3d
 import numpy as np
 import pandas as pd
 
-pc1 = o3d.io.read_point_cloud('/home/dim26fa/coding/training/logs_pcn_20240222_144847/010_input.ply')
-pc2 = o3d.io.read_point_cloud('/home/dim26fa/coding/training/logs_pcn_20240222_144847/020_input.ply')
+pc1 = o3d.io.read_point_cloud('/home/dim26fa/coding/training/logs_pcn_20240530_163253/100_gt.ply')
+pc2 = o3d.io.read_point_cloud('/home/dim26fa/coding/training/logs_pcn_20240530_163253/100_output.ply')
 pc1 = pd.read_csv('/home/dim26fa/data/imod_shapes/21022024/rectangle/sample_17.csv')
 pc2 = pd.read_csv('/home/dim26fa/data/imod_shapes/21022024/rectangle/sample_18.csv')
 arr1 = np.array(pc1)
@@ -176,7 +177,7 @@ plt.show()
 
 from scipy.spatial import KDTree
 
-tree = KDTree(gt)
+tree = KDTree(arr2)
 # Query the KD-tree for each source point to find its nearest neighbor in the target point cloud
 distances, _ = tree.query(unique_pred)
 
@@ -209,8 +210,8 @@ import open3d as o3d
 import pandas as pd
 import numpy as np
 import os
-pred_ply = o3d.io.read_point_cloud('/home/dim26fa/coding/training/logs_pcn_20240409_111553/236_output.ply')
-gt_ply = o3d.io.read_point_cloud('/home/dim26fa/coding/training/logs_pcn_20240409_111553/236_gt.ply')
+pred_ply = o3d.io.read_point_cloud('/home/dim26fa/coding/testing/logs_pcn_20240420_134549/104_output.ply')
+gt_ply = o3d.io.read_point_cloud('/home/dim26fa/coding/testing/logs_pcn_20240420_134549/104_gt.ply')
 pred = pd.DataFrame(pred_ply.points, columns=['x', 'y', 'z'])
 gt = pd.DataFrame(gt_ply.points, columns=['x', 'y', 'z'])
 pred = pred.drop_duplicates()
@@ -218,7 +219,7 @@ pred = np.array(pred)
 gt = np.array(gt_ply.points)
 
 # Define the folder containing your .ply files
-folder_path = '/home/dim26fa/coding/training/logs_pcn_20240409_111553/'
+folder_path = '/home/dim26fa/coding/testing/logs_pcn_20240420_134549/'
 
 # List all .ply files in the folder
 ply_files = [f for f in os.listdir(folder_path) if f.endswith('.ply')]
@@ -279,8 +280,10 @@ for i, (pred, new_data) in enumerate(datasets, start=1):
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-ax.scatter(pred[:, 0], pred[:, 1], pred[:, 2], color='red', marker='o', label='pred')
-ax.scatter(gt[:, 0], gt[:, 1], gt[:, 2], color='blue', marker='o', label='gt')
+ax.scatter(centers_of_mass_pred['x'], centers_of_mass_pred['y'], centers_of_mass_pred['z'], color='red', marker='o', label='pred')
+ax.scatter(centers_of_mass_gt['x'], centers_of_mass_gt['y'], centers_of_mass_gt['z'], color='blue', marker='o', label='gt')
+plt.legend()
+plt.savefig('/home/dim26fa/data/to_plot/centers.png')
 plt.show()
 
 import plotly.io as pio

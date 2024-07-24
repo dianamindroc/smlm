@@ -17,7 +17,7 @@ class PCN(nn.Module):
         num_coarse: 1024
     """
 
-    def __init__(self, num_dense=16384, latent_dim=1024, grid_size=4, classifier=False, num_classes=2):
+    def __init__(self, num_dense=16384, latent_dim=1024, grid_size=4, classifier=False, num_classes=2, in_channels=3):
         super().__init__()
 
         self.num_dense = num_dense
@@ -31,7 +31,7 @@ class PCN(nn.Module):
         self.num_coarse = self.num_dense // (self.grid_size ** 2)
 
         self.first_conv = nn.Sequential(
-            nn.Conv1d(3, 128, 1),
+            nn.Conv1d(in_channels, 128, 1),
             nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
             nn.Conv1d(128, 256, 1)

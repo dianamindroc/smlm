@@ -126,7 +126,7 @@ def _remove_corners(point_cloud):
     import hdbscan
     clusterer = hdbscan.HDBSCAN(min_cluster_size=20, min_samples=None, algorithm='best', alpha=0.7,
                                 metric='euclidean')
-    cluster_labels = clusterer.fit_predict(point_cloud)
+    cluster_labels = clusterer.fit_predict(point_cloud[['x', 'y', 'z']])
     n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
     p_remove_cluster = 0.5
 
@@ -150,12 +150,26 @@ def _remove_corners(point_cloud):
         return point_cloud
 
 
+def add_anisotropy(point_cloud, anisotropy_factor, anisotropic_axis):
+    if anisotropic_axis == 'x':
+        axis = 0
+    elif anisotropic_axis == 'y':
+        axis = 1
+    elif anisotropic_axis == 'z':
+        axis = 2
+
+    augmented_point_cloud = np.copy(point_cloud)
+    augmented_point_cloud[:, axis] *= anisotropy_factor
+    return augmented_point_cloud
+
+
 def get_partial_data(root_folder, subfolder_list):
     import pandas as pd
     for append in subfolder_list:
         path = root_folder + append
         pcs = [os.path.join(path, entry) for entry in os.listdir(path) if entry.endswith('.csv')]
-        pcs_array = [pd.read_csv(pc, index_col=0) for pc in pcs]
+        pcs_array = [pd.read_csv(pc) for pc in pcs]
+        #partial_pcs = [add_anisotropy(pc, 2, 'z') for pc in pcs_array]
         partial_pcs = [_remove_corners(pc) for pc in pcs_array]
         for i, pc in enumerate(partial_pcs):
             pathh = root_folder.split('gt')[0] + 'partial/' + append + '/smlm_sample'

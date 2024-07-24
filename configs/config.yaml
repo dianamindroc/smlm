@@ -1,26 +1,27 @@
 dataset:
-  root_folder: '/home/dim26fa/data/simulated_dna_origami_multiple_sizes/'
+  root_folder: '/home/dim26fa/data/sim_dna_rot_model_23072024/train/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
   remove_part_prob: 0.4
   dataset_type: 'tetra'
-  remove_corners: False
+  remove_corners: True
   remove_corners_prob: 0.5
   anisotropy: True
   anisotropy_factor: 2.0
   anisotropy_axis: 'z'
   initial_alpha: 1.0
-  number_classes: 6
+  number_classes: 2
 model: 'pcn'
 train:
   lr: 0.001
-  batch_size: 64
+  channels: 3
+  batch_size: 8
   num_workers: 6
   momentum: 0.9
   momentum2: 0.999
   num_epochs: 500
-  cd_loss: 'ChamferDistanceL1'
+  loss: 'own_dcd'
   early_stop_patience: 30
   log_dir: '/home/dim26fa/coding/training'
   scheduler_type: reduce
@@ -30,13 +31,16 @@ train:
   step_size: 50
   ignore_zeros: False
   augmentation: True
-  initial_alpha: 0.01
+  initial_alpha:
   loss1_improvement_threshold: 30
   min_improvement_epochs: 10
   classifier: True
   pretrained: False
   ckpt: ''
-  autoencoder: True
+  autoencoder: False
+  lambda_reg: 0.01
+  alpha_density: 0.5
+  beta_sparsity: 0.02
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

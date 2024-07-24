@@ -152,8 +152,8 @@ class ChamferDistance(nn.Module):
        input2: (B, M, 3)
        """
        #return chamfer_3DFunction.apply(input1, input2)
-       dist1, dist2, _, _ = chamfer_3DFunction.apply(input1, input2)
-       return dist1, dist2
+       dist1, dist2, idx1, idx2 = chamfer_3DFunction.apply(input1, input2)
+       return dist1, dist2, idx1, idx2
 
 #     def forward(self, input1, input2):
 #         """
