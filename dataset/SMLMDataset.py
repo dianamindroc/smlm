@@ -3,6 +3,7 @@ from torch.utils.data import Dataset as DS
 import pandas as pd
 import numpy as np
 import os
+import open3d as o3d
 
 from helpers.data import get_label, read_pts_file, assign_labels
 
@@ -93,7 +94,8 @@ class Dataset(DS):
         #augmented_point_cloud = np.column_stack((augmented_point_cloud, point_cloud[:, 3:]))  # Append the intensity back
         return augmented_point_cloud
 
-    def _add_anisotropy(self, point_cloud, anisotropy_factor, anisotropic_axis):
+    @staticmethod
+    def _add_anisotropy(point_cloud, anisotropy_factor, anisotropic_axis):
         if anisotropic_axis == 'x':
             axis = 0
         elif anisotropic_axis == 'y':
@@ -104,14 +106,15 @@ class Dataset(DS):
         augmented_point_cloud = np.copy(point_cloud)
         augmented_point_cloud[:, axis] *= anisotropy_factor
         return augmented_point_cloud
+
     def _remove_points(self, point_cloud):
         partial_pc = point_cloud
         num_points = len(point_cloud)
         remove_points_mask = np.random.choice([True, False], num_points, p=[self.p_remove_point , 1 - self.p_remove_point ])
         partial_pc = point_cloud[~remove_points_mask]
         return partial_pc
-
-    def _remove_outliers(self, point_cloud):
+    @staticmethod
+    def _remove_outliers(point_cloud):
         import hdbscan
         clusterer = hdbscan.HDBSCAN(min_cluster_size=50, min_samples=None, algorithm='best', alpha=0.7,metric='euclidean')
         cluster_labels = clusterer.fit_predict(point_cloud)
@@ -120,6 +123,24 @@ class Dataset(DS):
         label_with_fewer_points = min(label_counts, key=label_counts.get)
         filtered_point_cloud = point_cloud[cluster_labels != label_with_fewer_points]
         return filtered_point_cloud
+    @staticmethod
+    def _remove_statistical_outliers(point_cloud, nb_neighbors=40, std_ratio=1.0):
+        # Assuming point_cloud is a NumPy array with shape (N, 5)
+        # where the first three columns are x, y, z coordinates
+        spatial_data = point_cloud[:, :3]
+
+        # Convert to Open3D point cloud object
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(spatial_data)
+
+        # Remove outliers
+        _, ind = pcd.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
+        inlier_indices = np.asarray(ind)
+
+        # Extract inlier rows from the original point cloud, keeping all columns
+        inlier_cloud = point_cloud[inlier_indices, :]
+
+        return inlier_cloud
 
     def _remove_corners(self, point_cloud):
         import hdbscan
@@ -186,6 +207,9 @@ class Dataset(DS):
             #arr[:, [0, 2]] = arr[:, [0, 2]].dot(rotation_matrix)  # random rotation
             #arr += np.random.normal(0, 0.02, size=arr.shape)  # random jitter
             #   arr = self._rotate_data(arr)
+        if self.remove_outliers:
+            arr = self._remove_statistical_outliers(arr)
+
         if self.anisotropy:
             arr_anisotropy = self._add_anisotropy(arr, self.anisotropy_factor, self.anisotropy_axis)
         else:
@@ -200,9 +224,9 @@ class Dataset(DS):
             else:
                 partial_arr = self._remove_corners(arr)
 
-        if self.remove_outliers:
-            arr = self._remove_outliers(arr)
-            partial_arr = self._remove_outliers(partial_arr)
+        # if self.remove_outliers:
+        #     arr = self._remove_statistical_outliers(arr)
+        #     partial_arr = self._remove_statistical_outliers(partial_arr)
 
         sample = {'pc': arr,
                   'pc_anisotropic': arr_anisotropy,

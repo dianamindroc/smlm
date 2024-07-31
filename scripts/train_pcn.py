@@ -17,7 +17,7 @@ matplotlib.use('Agg')
 from helpers.data import get_highest_shape
 from helpers.logging import create_log_folder
 from helpers.visualization import print_pc, save_plots
-from model_architectures import pcn, folding_net, pointr, losses
+from model_architectures import pcn, losses
 from model_architectures.transforms import ToTensor, Padding
 from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric, set_seed
 from dataset.SMLMDataset import Dataset
@@ -65,7 +65,9 @@ def train(config, exp_name=None, fixed_alpha=None):
         'lambda_reg': config.train.lambda_reg,
         'alpha_density': config.train.alpha_density,
         'beta_sparsity': config.train.beta_sparsity,
-        'channels': config.train.channels
+        'channels': config.train.channels,
+        'remove_outliers': config.dataset.remove_outliers,
+        'gml_sigma': config.train.gml_sigma
     }
     log_dir = create_log_folder(config.train.log_dir, config.model)
     print('Loading Data...')
@@ -102,7 +104,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                                data_augmentation=False,
                                remove_part_prob = train_config['remove_part_prob'],
                                remove_corners = train_config['remove_corners'],
-                               remove_outliers = False,
+                               remove_outliers = train_config['remove_outliers'],
                                anisotropy = train_config['anisotropy'],
                                anisotropy_axis=train_config['anisotropy_axis'],
                                anisotropy_factor=train_config['anisotropy_factor'])
@@ -120,8 +122,7 @@ def train(config, exp_name=None, fixed_alpha=None):
 
     # model
     model = pcn.PCN(num_dense=16384, latent_dim=1024, grid_size=4, classifier=train_config['classifier'],
-                    num_classes=config.dataset.number_classes, in_channels=train_config['channels']).to(device)
-
+                    num_classes=config.dataset.number_classes, channels=train_config['channels']).to(device)
     # optimizer_recon
     #optimizer_recon = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(0.9, 0.999))
     #lr_schedual = optim.lr_scheduler.StepLR(optimizer_recon, step_size=50, gamma=0.7)
@@ -197,11 +198,12 @@ def train(config, exp_name=None, fixed_alpha=None):
         #### SMLMDataset
         for i, data in enumerate(train_dataloader):
             c = data['pc']
-            c = c[:, :, :3]
             p = data['partial_pc']
-            p = p[:, :, :3]
             c_anisotropic = data['pc_anisotropic']
-            c_anisotropic = c_anisotropic[:, :, :3]
+            if train_config['channels'] == 3:
+                c = c[:, :, :3]
+                p = p[:, :, :3]
+                c_anisotropic = c_anisotropic[:, :, :3]
             #mask_complete = data['pc_mask']
             label = data['label']
             if train_config['autoencoder']:
@@ -235,17 +237,25 @@ def train(config, exp_name=None, fixed_alpha=None):
                 density_pred = _compute_density(dense_pred)
                 density_gt = _compute_density(c)
                 density_loss = _with_density(dense_pred, c, density_pred, density_gt)
-                sparsity_loss = torch.tensor(_sparsity_regularization(dense_pred, train_config['lambda_reg']))
-                loss = cd_loss + train_config['alpha_density'] * density_loss + train_config['beta_sparsity'] * sparsity_loss
+                #sparsity_loss = torch.tensor(_sparsity_regularization(dense_pred, train_config['lambda_reg']))
+                loss = cd_loss + train_config['alpha_density'] * density_loss # + train_config['beta_sparsity'] * sparsity_loss
                 #print(f'CD Loss: {cd_loss}, Density Loss: {density_loss}, Sparsity Loss: {sparsity_loss}')
             elif train_config['loss'] == 'own_dcd':
                 from model_architectures.losses import DensityAwareChamferLoss
                 density_aware_chamfer_loss = DensityAwareChamferLoss()
                 loss = density_aware_chamfer_loss(dense_pred, c)
+            elif train_config['loss'] == 'gml':
+                from model_architectures.losses import GMMLoss
+                gml_loss = GMMLoss()
+                loss1 = gml_loss(coarse_pred, c)
+                loss2 = losses.cd_loss_l1(dense_pred, c)
+                loss = loss1 + alpha * loss2
             else:
                 loss1 = losses.cd_loss_l1(coarse_pred, c)
                 loss2 = losses.cd_loss_l1(dense_pred, c)
                 loss = loss1 + alpha * loss2
+                wandb.log({'coarse_loss': loss1 * 1e3})
+                wandb.log({'dense_loss': loss2 * 1e3})
 
             if train_config['classifier']:
                 label = label.to(torch.long)
@@ -267,7 +277,7 @@ def train(config, exp_name=None, fixed_alpha=None):
         wandb.log({'alpha': alpha})
         export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), dense_pred[0].detach().cpu().numpy())
         if train_config['loss'] == 'adapted':
-            del p, c, coarse_pred, dense_pred, cd_loss, density_pred, density_gt, loss, density_loss, sparsity_loss
+            del p, c, coarse_pred, dense_pred, cd_loss, density_pred, density_gt, loss, density_loss #, sparsity_loss
         torch.cuda.empty_cache()
         #export_ply(os.path.join(log_dir, '{:03d}.ply'.format(i)), np.transpose(dense_pred[0].detach().cpu().numpy(), (1,0)))
         #lr_schedual.step()
@@ -288,11 +298,12 @@ def train(config, exp_name=None, fixed_alpha=None):
             #### SMLMDataset
             for i, data in enumerate(val_dataloader):
                 c = data['pc']
-                c = c[:, :, :3]
                 p = data['partial_pc']
-                p = p[:, :, :3]
                 c_anisotropic = data['pc_anisotropic']
-                c_anisotropic = c_anisotropic[:, :, :3]
+                if train_config['channels'] == 3:
+                    c = c[:, :, :3]
+                    p = p[:, :, :3]
+                    c_anisotropic = c_anisotropic[:, :, :3]
                 mask_complete = data['pc_mask']
                 label = data['label']
                 if train_config['autoencoder']:
@@ -395,15 +406,14 @@ def plot_tsne(features, labels, labels_names, epoch, log_dir):
 
 
 def adjust_alpha(epoch):
-    # DOES NOT WORK YET
     if epoch < 120:
-        alpha = 0.01
+        alpha = 0.001 # was 0.01
     elif epoch < 200:
-        alpha = 0.1
+        alpha = 0.005 # was 0.1, 0.02
     elif epoch < 300:
-        alpha = 0.5
+        alpha = 0.01 # was 0.5, 0.05
     else:
-        alpha = 1.0
+        alpha = 0.02 # was 1, 0.1
     return alpha
 
 

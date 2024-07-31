@@ -20,6 +20,11 @@ scripts/*.def
 scripts/*.sif
 scripts/*.yaml
 scripts/quick_read.py
+scripts/train_script_clean.py
+scripts/train_pcn_varying_size.py
+scripts/train_snowflake.py
+
+dataset/SMLMSimulatorStats.py
 
 notebooks/*.html
 notebooks/GeometricShapes

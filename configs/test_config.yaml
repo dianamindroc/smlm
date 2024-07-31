@@ -1,12 +1,17 @@
 dataset:
 
-  root_folder: '/home/dim26fa/data/test_simulated_dna_origami/'
+  root_folder: '/home/dim26fa/data/DNA_TETRA/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
   remove_part_prob: 0.4
   dataset_type: 'tetra'
   remove_corners: True
+  remove_outliers: True
+  anisotropy: False
+  anisotropy_factor: 2.0
+  anisotropy_axis: 'z'
+  number_classes: 1
 model: 'pcn'
 test:
   lr: 0.001
@@ -15,6 +20,7 @@ test:
   momentum: 0.9
   momentum2: 0.999
   num_epochs: 500
+  classifier: True
   cd_loss: 'ChamferDistanceL1'
   early_stop_patience: 30
   log_dir: '/home/dim26fa/coding/testing'
@@ -26,4 +32,6 @@ test:
   ignore_zeros: False
   augmentation: True
   save: True
-  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240529_122034/best_l1_cd.pth'
+  #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240529_122034/best_l1_cd.pth'
+  #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240725_125117/best_l1_cd.pth'
+  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240730_105324/best_l1_cd.pth'

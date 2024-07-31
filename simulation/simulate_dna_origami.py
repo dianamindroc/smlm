@@ -15,12 +15,17 @@ class SMLMDnaOrigami:
         self.apply_rotation = apply_rotation
         if stats is not None:
             self.stats = stats
+        else:
+            print('Please provide a stats file')
         if struct_type == 'cube':
             x, y, z, size = [int(x) for x in input("Enter cube coordinates and maximum size (separate by space): ").split()]
             self.model_structure = self.generate_cube(x, y, z, size)
         elif struct_type == 'pyramid':
             base, height = [int(x) for x in input("Enter pyramid base edge size and height (separate by space): ").split()]
             self.model_structure = self.generate_pyramid(base, height)
+        elif struct_type == 'tetrahedron':
+            side = int(input("Enter tetrahedron side length: "))
+            self.model_structure = self.generate_tetrahedron(side)
         elif struct_type == 'sphere':
             radius, latitude_divisions, longitude_divisions = [int(x) for x in input("Enter sphere radius, "
                                                                                      "nr. of latitude_divisions "
@@ -28,10 +33,11 @@ class SMLMDnaOrigami:
             self.model_structure = self.generate_sphere(radius, latitude_divisions, longitude_divisions)
         else:
             raise NotImplementedError("Only cube and pyramid supported at the moment :)")
-        self.radius = int(input("What is the maximum radius in which to generate SMLM samples?"))
-        self.number_localizations, self.percentage = [int(x) for x in input("How many localizations to generate around each center and with which variation (separate by space)?").split()]
-        self.uncertainty_factor = int(input("What is the uncertainty factor for the localizations?"))
+        #self.radius = int(input("What is the maximum radius in which to generate SMLM samples?"))
+        #self.number_localizations, self.percentage = [int(x) for x in input("How many localizations to generate around each center and with which variation (separate by space)?").split()]
+        #self.uncertainty_factor = int(input("What is the uncertainty factor for the localizations?"))
         self.base_folder = input("Where to save the generated samples?")
+        print('Going to generate ' + str(number_dna_origami_samples) + ' samples for ' + struct_type + '.')
         if save_model:
             self.save_model_structure()
         self.generate_all_dna_origami_smlm_samples()
@@ -69,6 +75,30 @@ class SMLMDnaOrigami:
         return corners
 
     @staticmethod
+    def generate_tetrahedron(side_length):
+        """
+        Generates a regular tetrahedron with the given side length.
+        The tetrahedron is centered at the origin.
+        :param side_length: The length of each edge of the tetrahedron.
+        :return: List of tuples containing the coordinates of the vertices.
+        """
+        # Calculate the height from the center of the base to the apex
+        height = np.sqrt(2 / 3) * side_length
+
+        # The radius of the circumscribed circle around the base triangle
+        base_radius = np.sqrt(3 / 9) * side_length
+
+        # Vertices of the tetrahedron
+        vertices = [
+            (0, 0, np.sqrt(2 / 3) * side_length),  # Top vertex (apex)
+            (base_radius, 0, -height / 3),  # Base vertices
+            (-base_radius / 2, base_radius * np.sqrt(3) / 2, -height / 3),
+            (-base_radius / 2, -base_radius * np.sqrt(3) / 2, -height / 3)
+        ]
+
+        return vertices
+
+    @staticmethod
     def generate_sphere(radius, latitude_divisions, longitude_divisions):
         coordinates = []
 
@@ -85,21 +115,26 @@ class SMLMDnaOrigami:
 
         return coordinates
 
-    @staticmethod
-    def generate_points_3d(center, radius, num_points, percentage):
+    def generate_points_3d(self, center, num_points):
         """"
         Function to generate random points around a center
         :param center: the coordinates of the center
         :param radius: the radius in which the points should be generated. The points will be generated inside the radius as well, not only at the radius
+        :param stats: the statistics used to generate the points inside the radius
         :param num_points: the number of points to generate
         :param percentage: percentage of variation desired in the data
         :return: list of generated points
         """
         points = []
+
         #threequarter = int(3/4*len(num_points))
-        new_loc = int(num_points + random.uniform(-percentage, percentage))
-        for i in range(new_loc):
-            r = random.uniform(0, radius)
+        #new_loc = int(num_points + random.uniform(-percentage, percentage))
+        std_dev_df = pd.DataFrame([stats['std_dev'] for stats in self.stats], columns=['x', 'y', 'z'])
+        overall_std_dev = std_dev_df.mean()
+        std_x, std_y, std_z = overall_std_dev['x'], overall_std_dev['y'], overall_std_dev['z']
+        for i in range(num_points):
+            #r = random.uniform(0, radius)
+            r = np.random.exponential(1.0)
             theta = random.uniform(0, 2 * math.pi)
             phi = random.uniform(0, math.pi)
 
@@ -107,9 +142,12 @@ class SMLMDnaOrigami:
 
             #r *= gaussian_values
 
-            x = center[0] + r * math.sin(phi) * math.cos(theta)
-            y = center[1] + r * math.sin(phi) * math.sin(theta)
-            z = center[2] + r * math.cos(phi)
+            #x = center[0] + r * math.sin(phi) * math.cos(theta)
+            #y = center[1] + r * math.sin(phi) * math.sin(theta)
+            #z = center[2] + r * math.cos(phi)
+            x = np.random.normal(center[0] + r * math.sin(phi) * math.cos(theta), std_x)
+            y = np.random.normal(center[1] + r * math.sin(phi) * math.sin(theta), std_y)
+            z = np.random.normal(center[2] + r * math.cos(phi), std_z)
             uncertainty_factor_xy = np.random.uniform(0, 0.15)
             uncertainty_factor_z = np.random.uniform(0, 0.4)
             uncertainty_x = abs(r * math.sin(phi) * math.cos(theta) * uncertainty_factor_xy)
@@ -122,28 +160,38 @@ class SMLMDnaOrigami:
             points.append((x, y, z, overall_uncertainty_xy, uncertainty_z))
         return points
 
-    def generate_one_dna_origami_smlm(self):
+    def generate_one_dna_origami_smlm(self, num_points):
         # old version: model_structure: list, radius: int, num_localizations: int):
         """"
         Function to generate a dna origami similar structure as from single-molecule localization microscopy (smlm)
         :param model_structure: the initial coordinates around which to generate random localizations. Typically list of tuples containing the x,y,z coordinates
         :param radius: the radius in which the localizations should be generated. The localizations will
         be generated inside the radius as, not only at the radius
-        :param num_localizations: the desired number of localizations to generate
+        :param num_points: the number of points to generate
         :return: returns list of generated localizations around the initial coordinates
         """
-        radius = int(random.choice(range(1, self.radius)))
-        for corner in self.model_structure:
-            self.dna_origami.append(self.generate_points_3d(corner, radius, self.number_localizations, self.percentage))
-            self.dna_origami_list.append(self.dna_origami)
 
-        return self.dna_origami_list
+        points_per_corner = np.random.multinomial(num_points, np.ones(len(self.model_structure))/len(self.model_structure))
+
+        #radius = int(random.choice(range(1, self.radius)))
+#        for corner in self.model_structure:
+#            self.dna_origami.append(self.generate_points_3d(corner))
+#            self.dna_origami_list.append(self.dna_origami)
+        for corner, num_points in zip(self.model_structure, points_per_corner):
+            self.dna_origami.extend(self.generate_points_3d(corner, num_points))
+        return self.dna_origami
 
     def generate_all_dna_origami_smlm_samples(self):
         for i in range(self.number_samples):
             if self.apply_rotation:
                 self.rotate_model()
-            self.generate_one_dna_origami_smlm()
+            num_points_list = [stats['num_points'] for stats in self.stats]
+            # Calculate mean (mu)
+            mu = np.mean(num_points_list)
+            # Calculate standard deviation (sigma)
+            sigma = np.std(num_points_list)
+            num_points = int(np.random.normal(mu, sigma))
+            self.generate_one_dna_origami_smlm(num_points)
             self.save_samples(i)
             self.dna_origami = []
 
@@ -158,8 +206,8 @@ class SMLMDnaOrigami:
         df_model_structure.to_csv(self.base_folder + '/model_structure.csv', index=False)
 
     def save_samples(self, index: int):
-        flattened_list = [element for sublist in zip(*self.dna_origami) for element in sublist]
-        df_smlm_sample = pd.DataFrame(flattened_list, columns=['x', 'y', 'z', 'sigma_xy', 'sigmaz'])
+        #flattened_list = [element for sublist in zip(*self.dna_origami) for element in sublist]
+        df_smlm_sample = pd.DataFrame(self.dna_origami, columns=['x', 'y', 'z', 'sigma_xy', 'sigmaz'])
         df_smlm_sample.to_csv(self.base_folder + '/smlm_sample' + str(index) + '.csv', index=False)
 
     @staticmethod

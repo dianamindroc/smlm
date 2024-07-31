@@ -682,3 +682,25 @@ def plot_html(df):
 #TODO: check npcs from heydarian - how they look
 #TODO: try out heydarian script with dna origami
 
+import os
+
+
+def get_files_by_indices(directory, indices):
+    # Get all files in the directory
+    all_files = os.listdir(directory)
+
+    # Filter files based on the indices and '_input' in their names
+    matching_files = [file for file in all_files if any(f"{idx}_input" in file for idx in indices)]
+
+    return matching_files
+
+
+def read_files(directory, file_list):
+    # Read and process the files
+    files_data = {}
+    for filename in file_list:
+        file_path = os.path.join(directory, filename)
+        with open(file_path, 'r') as file:
+            files_data[filename] = file.read()
+
+    return files_data

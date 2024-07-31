@@ -4,8 +4,9 @@ import pandas as pd
 import os
 import seaborn as sns
 import matplotlib.pyplot as plt
+import hdbscan
 
-def analyze_point_cloud(point_cloud):
+def analyze_point_cloud(point_cloud, min_cluster_size):
     """
     Method to analyze point cloud statistics.
     :param point_cloud: point cloud of shape (N, 3)
@@ -30,6 +31,23 @@ def analyze_point_cloud(point_cloud):
     covariance_matrix = point_cloud.cov()
     eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix)
 
+    # Cluster the points using HDBSCAN
+    hdbscan_clusterer = hdbscan.HDBSCAN(min_cluster_size)
+    cluster_labels = hdbscan_clusterer.fit_predict(point_cloud)
+
+    # Identify unique clusters (excluding noise points labeled as -1)
+    unique_clusters = set(cluster_labels) - {-1}
+
+    # Calculate cluster centroids and distances between them
+    centroids = []
+    for cluster in unique_clusters:
+        cluster_points = point_cloud[cluster_labels == cluster]
+        centroid = cluster_points.mean(axis=0)
+        centroids.append(centroid)
+    centroids = np.array(centroids)
+
+    cluster_distances = calculate_centroid_distances(centroids)
+
     return {
         'num_points': num_points,
         'centroid': centroid,
@@ -37,11 +55,25 @@ def analyze_point_cloud(point_cloud):
         'var': var,
         'bounding_box_size': bounding_box_size,
         'eigenvalues': eigenvalues,
-        'eigenvectors': eigenvectors
+        'eigenvectors': eigenvectors,
+        'cluster_distances': cluster_distances
     }
 
+def calculate_centroid_distances(centroids):
+    """
+    Calculate distances between cluster centroids.
+    :param centroids: array of centroid coordinates of shape (k, 3)
+    :return: list of distances between each pair of centroids
+    """
+    num_centroids = len(centroids)
+    distances = []
+    for i in range(num_centroids):
+        for j in range(i + 1, num_centroids):
+            distance = np.linalg.norm(centroids[i] - centroids[j])
+            distances.append(distance)
+    return distances
 
-def load_and_analyze_point_clouds(directory, suffix='.csv'):
+def load_and_analyze_point_clouds(directory, suffix='.csv', min_cluster_size=25):
     """
     Load point clouds from a directory and analyze them.
     :param directory: path to directory containing point clouds
@@ -66,7 +98,7 @@ def load_and_analyze_point_clouds(directory, suffix='.csv'):
             point_cloud = pd.DataFrame(pc.points, columns=['x', 'y', 'z'])
         else:
             raise ValueError('Suffix must be .csv or .ply files')
-        stats = analyze_point_cloud(point_cloud)
+        stats = analyze_point_cloud(point_cloud, min_cluster_size)
         stats_list.append(stats)
 
     return stats_list
@@ -94,7 +126,6 @@ def plot_number_points(stats, style='dark', color='steelblue'):
     plt.ylabel('Frequency', color=clr)
     plt.tick_params(colors=clr)
     plt.show()
-
 
 def plot_bounding_box_size(stats, style='dark', color='steelblue'):
     if style == 'dark':

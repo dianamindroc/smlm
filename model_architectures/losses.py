@@ -300,3 +300,76 @@ class DensityAwareChamferLoss(nn.Module):
         return total_loss
 
 #TODO: clean up duplicate or useless things
+
+class GaussianMixtureLoss(nn.Module):
+    def __init__(self, sigma=1.0):
+        super(GaussianMixtureLoss, self).__init__()
+        self.sigma = sigma
+        self.const = 0.5 * torch.log(torch.tensor(2 * torch.pi * sigma ** 2))
+
+    def forward(self, predicted_points, gt_means):
+        """
+        predicted_points: Tensor of shape (B, N, D), where B is the batch size,
+                          N is the number of predicted points per batch, and D is the dimensionality.
+        gt_means: Tensor of shape (B, M, D), where B is the batch size,
+                  M is the number of ground truth points per batch, and D is the dimensionality.
+        """
+        B, N, D = predicted_points.size()
+        _, M, _ = gt_means.size()
+
+        # Expand dimensions to (B, N, M, D)
+        predicted_expanded = predicted_points.unsqueeze(2).expand(B, N, M, D)
+        gt_expanded = gt_means.unsqueeze(1).expand(B, N, M, D)
+
+        # Compute squared distances
+        sq_distances = (predicted_expanded - gt_expanded).pow(2).sum(dim=3)
+
+        # Compute log-likelihood for each predicted point w.r.t. each Gaussian component
+        log_probs = -self.const - sq_distances / (2 * self.sigma ** 2)
+
+        # Use log-sum-exp trick for numerical stability
+        max_log_probs, _ = torch.max(log_probs, dim=2, keepdim=True)
+        log_likelihood = max_log_probs + torch.log(torch.exp(log_probs - max_log_probs).sum(dim=2, keepdim=True))
+
+        # Negative log-likelihood
+        loss = -log_likelihood.mean()
+        return loss
+
+class GMMLoss(nn.Module):
+    def __init__(self):
+        super(GMMLoss, self).__init__()
+
+    def forward(self, predicted, target):
+        pred_xyz, pred_sigma = predicted
+        target_xyz = target[:, :, :3]  # Assuming target[:, :, 3:5] are sigmas, which we don't use
+
+        B, N, _ = pred_xyz.size()  # B: batch size, N: number of points
+        _, M, _ = target_xyz.size()  # M: number of target points
+        print("pred_xyz size:", pred_xyz.size())
+        print("pred_sigma size:", pred_sigma.size())
+        print("target_xyz size:", target_xyz.size())
+        # Compute pairwise distances
+        dist_xy = torch.sum((pred_xyz[:, :, :2].unsqueeze(2) - target_xyz[:, :, :2].unsqueeze(1))**2, dim=-1)
+        dist_z = (pred_xyz[:, :, 2:3].unsqueeze(2) - target_xyz[:, :, 2:3].unsqueeze(1))**2
+
+        print("dist_xy size:", dist_xy.size())
+        print("dist_z size:", dist_z.size())
+        # Split sigma into xy and z components
+        pred_sigma_xy = pred_sigma[:, :, 0:1]
+        pred_sigma_z = pred_sigma[:, :, 1:2]
+
+        print("pred_sigma_xy size:", pred_sigma_xy.size())
+        print("pred_sigma_z size:", pred_sigma_z.size())
+        # Compute the probability density
+        constant = torch.log(torch.tensor(2 * 3.14159))  # log(2?)
+        exponent_xy = -0.5 * dist_xy / (pred_sigma_xy.unsqueeze(2) + 1e-8)
+        exponent_z = -0.5 * dist_z / (pred_sigma_z.unsqueeze(2) + 1e-8)
+        log_coefficient = -torch.log(pred_sigma_xy + 1e-8) - 0.5 * torch.log(pred_sigma_z + 1e-8)
+        log_probs = log_coefficient.unsqueeze(2) - 1.5 * constant + exponent_xy + exponent_z
+
+        # Compute the negative log-likelihood
+        nll = -torch.logsumexp(log_probs, dim=1)
+
+        return nll.mean()
+
+

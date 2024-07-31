@@ -164,13 +164,18 @@ def print_pc(pc_list, permutation=False):
         x = arr[:, 0]
         y = arr[:, 1]
         z = arr[:, 2]
+        ax.view_init(elev=30, azim=120)
         ax.scatter(x, y, z)
     plt.show()
 
 
 def _load_point_cloud(file_path):
-    # Assuming the file format is CSV and contains three columns: x, y, z
-    return np.genfromtxt(file_path, delimiter=',')
+    if file_path.endswith('.csv'):
+        # Assuming the file format is CSV and contains three columns: x, y, z
+        return np.genfromtxt(file_path, delimiter=',')
+    elif file_path.endswith('.ply'):
+        pc = o3d.io.read_point_cloud(file_path)
+        return np.array(pc.points)
 
 
 def _plot_point_cloud(point_clouds, overlay, path, epoch, loss, save=False):
@@ -188,7 +193,6 @@ def _plot_point_cloud(point_clouds, overlay, path, epoch, loss, save=False):
         ax = fig.add_subplot(111, projection='3d')
         for i, pc in enumerate(point_clouds):
             x, y, z = pc[:, 0], pc[:, 1], pc[:, 2]
-
             ax.scatter(x, y, z, zorder=i, c=colours[i])
 
             ax.set_xlabel('X')
@@ -282,3 +286,34 @@ def overlay_pc(gt, pred):
     ax.scatter(pred[:, 0], pred[:, 1], pred[:, 2], color='red', marker='o', label='pred')
     ax.scatter(gt[:, 0], gt[:, 1], gt[:, 2], color='blue', marker='o', label='gt')
     plt.show()
+
+
+def o3d_plot(pc_list):
+    o3d_list = []
+    for pc in pc_list:
+        # Check if the input is a path or an array
+        if isinstance(pc, str) and os.path.isfile(pc):
+            # If it's a path, read the point cloud file
+            o3d_pc = o3d.io.read_point_cloud(pc)
+        elif isinstance(pc, np.ndarray):
+            # If it's an array, create an Open3D PointCloud object
+            o3d_pc = o3d.geometry.PointCloud()
+            o3d_pc.points = o3d.utility.Vector3dVector(pc)
+        elif isinstance(pc, str) and os.path.isfile(pc) and pc.lower().endswith('.csv'):
+            # If it's a path to a CSV file, read the CSV into a NumPy array
+            point_data = pd.read_csv(pc).to_numpy()
+            o3d_pc = o3d.geometry.PointCloud()
+            o3d_pc.points = o3d.utility.Vector3dVector(point_data)
+        else:
+            print(f"Unsupported type or file not found: {pc}")
+            continue
+        # Generate random colors for each point cloud
+        color = np.random.rand(3)
+        o3d_pc.colors = o3d.utility.Vector3dVector(np.tile(color, (np.asarray(o3d_pc.points).shape[0], 1)))
+
+        # Add to the list
+        o3d_list.append(o3d_pc)
+
+    # Visualize all point clouds together
+    o3d.visualization.draw_geometries(o3d_list)
+
