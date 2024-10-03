@@ -30,7 +30,9 @@ We created tutorial notebooks for an easy understanding of the project.
 </a>
 
 ### Data simulation
+There are two ways to simulate data:
 
+#### 1. Simulation using SuReSim
 To use the simulation code, the original java code of the SureSim simulator from [Kuner Lab](https://github.com/tkunerlab/JavaUmsetzungSTORMSimulation) needs to be built. 
 Subsequently, the path to the .jar file (the target of the project) will be used in the configuration file `config.yaml`. 
 To run the simulations from the command line, navigate to the scripts folder and run simulations:
@@ -38,6 +40,8 @@ To run the simulations from the command line, navigate to the scripts folder and
 `python run_simulation.py --config config.yaml`
 
 Default number of simulated samples is 15. The default microscopy technique used for simulation parameters is dSTORM. Epitope density, recorded frames and detection efficiency are the simulation parameters that are randomly varied in specific ranges. To modify these ranges, navigate to `simulate_data.py` in `simulation` folder.
+
+#### 2. Simulation using script 
 
 ### Containerized simulation application
 

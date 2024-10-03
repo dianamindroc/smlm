@@ -24,8 +24,10 @@ class SMLMDnaOrigami:
         self.apply_rotation = apply_rotation
         if stats is not None:
             self.stats = stats
+            print('You provided a stats file. Simulating with prior knowledge.')
         else:
-            print('Please provide a stats file')
+            self.stats = None
+            print('You did not provide a stats file. Simulating without prior knowledge.')
         if struct_type == 'cube':
             x, y, z, size = [int(x) for x in input("Enter cube coordinates and maximum size (separate by space): ").split()]
             self.model_structure = self.generate_cube(x, y, z, size)
@@ -131,9 +133,10 @@ class SMLMDnaOrigami:
         """
         points = []
 
-        std_dev_df = pd.DataFrame([stats['std_dev'] for stats in self.stats], columns=['x', 'y', 'z'])
-        overall_std_dev = std_dev_df.mean()
-        std_x, std_y, std_z = overall_std_dev['x'], overall_std_dev['y'], overall_std_dev['z']
+        if self.stats:
+            std_dev_df = pd.DataFrame([stats['std_dev'] for stats in self.stats], columns=['x', 'y', 'z'])
+            overall_std_dev = std_dev_df.mean()
+            std_x, std_y, std_z = overall_std_dev['x'], overall_std_dev['y'], overall_std_dev['z']
         for i in range(num_points):
             #r = random.uniform(0, radius)
             r = np.random.exponential(1.0)
@@ -192,12 +195,15 @@ class SMLMDnaOrigami:
         for i in range(self.number_samples):
             if self.apply_rotation:
                 self.rotate_model()
-            num_points_list = [stats['num_points'] for stats in self.stats]
-            # Calculate mean (mu)
-            mu = np.mean(num_points_list)
-            # Calculate standard deviation (sigma)
-            sigma = np.std(num_points_list)
-            num_points = int(np.random.normal(mu, sigma))
+            if self.stats:
+                num_points_list = [stats['num_points'] for stats in self.stats]
+                # Calculate mean (mu)
+                mu = np.mean(num_points_list)
+                # Calculate standard deviation (sigma)
+                sigma = np.std(num_points_list)
+                num_points = int(np.random.normal(mu, sigma))
+            else:
+                num_points = np.random.randint(400, 1400)
             self.generate_one_dna_origami_smlm(num_points)
             self.save_samples(i)
             self.save_model_structure(i)
