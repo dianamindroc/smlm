@@ -4,24 +4,32 @@ This repository contains scripts, notebooks and helper functions for the "Toward
 
 | [Installation](#installation) | [Training](#training) | [Inference](#inference) | [Tutorial](#tutorial-notebooks) | [Data simulation](#data-simulation) | [Container](#containerized-simulation-application) | [Contents](#contents) |
 
-#### Installation 
+### Installation 
 Using mamba package manager, one can create a new environment for this repository and install the dependencies by running  
 
 `mamba create --name <env_name>`
 
+`mamba activate <env_name>`
+
 `pip install .` in the smlm folder 
 
-#### Training
+### Training
+To train a network, do :
 
-#### Inference
+`cd scripts`
 
-#### Tutorial notebooks
+`python run_training.py --config /path/to/config.yaml --exp_name 'exp_name' --fixed_alpha=0.001`
+
+Set the path to the config file (e.g. configs/config.yaml), set an experiment name and, if desired, set a fixed_alpha. Alpha is used for setting a ratio between coarse and fine loss during training. If fixed alpha is set, the ratio stays always the same. Otherwise, it changes based on where we are during training, with later epochs considering a bigger ratio of the fine loss. 
+### Inference
+
+### Tutorial notebooks
 We created tutorial notebooks for an easy understanding of the project.
 * Introduction and data simulation  <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Intro_and_data_simulation.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
-#### Data simulation
+### Data simulation
 
 To use the simulation code, the original java code of the SureSim simulator from [Kuner Lab](https://github.com/tkunerlab/JavaUmsetzungSTORMSimulation) needs to be built. 
 Subsequently, the path to the .jar file (the target of the project) will be used in the configuration file `config.yaml`. 
@@ -31,7 +39,7 @@ To run the simulations from the command line, navigate to the scripts folder and
 
 Default number of simulated samples is 15. The default microscopy technique used for simulation parameters is dSTORM. Epitope density, recorded frames and detection efficiency are the simulation parameters that are randomly varied in specific ranges. To modify these ranges, navigate to `simulate_data.py` in `simulation` folder.
 
-#### Containerized simulation application
+### Containerized simulation application
 
 Prerequisites: [Singularity](https://sylabs.io/guides/3.0/user-guide/quick_start.html) installed on the host machine.
 
@@ -50,7 +58,7 @@ If another folder is to be used for models, the container can be run in interact
 
 Edit the config file accordingly and run `python3 /smlm/scripts/run_simulation.py --config new_config.yaml` inside the container with default 15 samples and dstorm technique or `smlm/scripts/run_simulation.py --config new_config.yaml -s number_of_samples -t technique`
 
-#### Contents
+### Contents
 
 ```
 smlm
