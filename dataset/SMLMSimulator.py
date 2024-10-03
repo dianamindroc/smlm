@@ -1,50 +1,9 @@
 import numpy as np
 from torch.utils.data import Dataset
 from sklearn.cluster import KMeans
-import random
 
 
 # Define the DNAOrigamiSimulator class
-def simulate_blinks(point, blinking_times, intensity, baseline_precision):
-    blinks = []
-    for _ in range(blinking_times):
-        intensity = intensity
-        noise = np.random.normal(0, baseline_precision, 3)
-        noisy_point = point + noise
-        #blinks.append(np.append(noisy_point, intensity))
-        blinks.append(noisy_point)
-    return blinks
-
-
-def get_corners_3d_box(length=30, width=30, height=30):
-    half_length = length / 2
-    half_width = width / 2
-    half_height = height / 2
-    corners = [
-        [-half_length, -half_width, -half_height],
-        [half_length, -half_width, -half_height],
-        [half_length, half_width, -half_height],
-        [-half_length, half_width, -half_height],
-        [-half_length, -half_width, half_height],
-        [half_length, -half_width, half_height],
-        [half_length, half_width, half_height],
-        [-half_length, half_width, half_height]
-    ]
-    return np.array(corners)
-
-
-def get_corners_3d_tetrahedron(side_length=100):
-    height = np.sqrt(2) / np.sqrt(3) * side_length
-    circumradius = np.sqrt(3) / 4 * side_length
-    corners = [
-        [0, 0, -height / 3],
-        [circumradius, 0, height * 2 / 3],
-        [-circumradius / 2, circumradius * np.sqrt(3) / 2, height * 2 / 3],
-        [-circumradius / 2, -circumradius * np.sqrt(3) / 2, height * 2 / 3]
-    ]
-    return np.array(corners)
-
-
 class DNAOrigamiSimulator(Dataset):
     def __init__(self, num_samples, structure_type, dye_properties,
                  augment=False,
@@ -63,16 +22,16 @@ class DNAOrigamiSimulator(Dataset):
     def _simulate_datasets(self):
         dataset = []
         if self.structure_type == 'box':
-            self.structure_ground_truth = get_corners_3d_box()
+            self.structure_ground_truth = self.get_corners_3d_box()
         elif self.structure_type == 'tetrahedron':
-            self.structure_ground_truth = get_corners_3d_tetrahedron()
+            self.structure_ground_truth = self.get_corners_3d_tetrahedron()
         for _ in range(self.num_samples):
             point_cloud = []
             for corner in self.structure_ground_truth:
                 intensity = np.random.uniform(*self.dye_properties['intensity_range'])
                 precision = np.random.uniform(*self.dye_properties['precision_range'])
                 blinking_times = np.random.randint(*self.dye_properties['blinking_times_range'])
-                point_cloud.extend(simulate_blinks(corner, blinking_times, intensity, precision))
+                point_cloud.extend(self.simulate_blinks(corner, blinking_times, intensity, precision))
             dataset.append((self.structure_ground_truth, np.array(point_cloud)))
         return dataset
 
@@ -102,7 +61,7 @@ class DNAOrigamiSimulator(Dataset):
             # Perform K-Means Clustering
             kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(pc)
 
-          # Probability of removing a cluster
+            # Probability of removing a cluster
             p_remove_cluster = 0.5
 
             if np.random.rand() < p_remove_cluster:
@@ -127,27 +86,47 @@ class DNAOrigamiSimulator(Dataset):
         return pc, pc_without_corners
 
     # Define the function to simulate blinks with Gaussian noise
+    @staticmethod
+    def simulate_blinks(point, blinking_times, intensity, baseline_precision):
+        blinks = []
+        for _ in range(blinking_times):
+            intensity = intensity
+            noise = np.random.normal(0, baseline_precision, 3)
+            noisy_point = point + noise
+            # blinks.append(np.append(noisy_point, intensity))
+            blinks.append(noisy_point)
+        return blinks
 
     # Define the function to get the corners of a 3D box
+    @staticmethod
+    def get_corners_3d_box(length=30, width=30, height=30):
+        half_length = length / 2
+        half_width = width / 2
+        half_height = height / 2
+        corners = [
+            [-half_length, -half_width, -half_height],
+            [half_length, -half_width, -half_height],
+            [half_length, half_width, -half_height],
+            [-half_length, half_width, -half_height],
+            [-half_length, -half_width, half_height],
+            [half_length, -half_width, half_height],
+            [half_length, half_width, half_height],
+            [-half_length, half_width, half_height]
+        ]
+        return np.array(corners)
 
-    def get_corners_3d_box_with_edges(self, length, width, height):
-        points = []
-        density = np.random.uniform(*self.dye_properties['density_range'])
-        num_dyes_length = int(length / density)
-        num_dyes_width = int(width / density)
-        num_dyes_height = int(height / density)
-
-        for i in range(num_dyes_length + 1):
-            fraction_length = i / num_dyes_length
-            for j in range(num_dyes_width + 1):
-                fraction_width = j / num_dyes_width
-            for k in range(num_dyes_height + 1):
-                fraction_height = k / num_dyes_height
-                point = np.array([fraction_length * length, fraction_width * width, fraction_height * height])
-                points.extend(point)
-        return np.array(points)
-
-    # Define the function to get the corners of a 3D tetrahedron
+    # Function to create the corners of a tetrahedron
+    @staticmethod
+    def get_corners_3d_tetrahedron(side_length=100):
+        height = np.sqrt(2) / np.sqrt(3) * side_length
+        circumradius = np.sqrt(3) / 4 * side_length
+        corners = [
+            [0, 0, -height / 3],
+            [circumradius, 0, height * 2 / 3],
+            [-circumradius / 2, circumradius * np.sqrt(3) / 2, height * 2 / 3],
+            [-circumradius / 2, -circumradius * np.sqrt(3) / 2, height * 2 / 3]
+        ]
+        return np.array(corners)
 
     def __len__(self):
         return len(self.data)
@@ -169,4 +148,3 @@ class DNAOrigamiSimulator(Dataset):
                   'label': label}
 
         return sample
-

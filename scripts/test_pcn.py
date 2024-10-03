@@ -7,6 +7,7 @@ import open3d as o3d
 import torch
 import torch.utils.data as Data
 import pandas as pd
+import torch.nn.functional as F
 
 from model_architectures import pcn
 from dataset.ShapeNet import ShapeNet
@@ -17,11 +18,11 @@ from torchvision import transforms
 from model_architectures.transforms import ToTensor, Padding
 from dataset.SMLMDataset import Dataset
 from helpers.data import get_highest_shape
-
+from joblib import dump, load
 from model_architectures.pcn_decoder import PCNDecoderOnly
 
-ckpt = torch.load('/home/dim26fa/coding/training/logs_pcn_20240730_105324/best_l1_cd.pth')
-model = pcn.PCN(classifier=True)
+ckpt = torch.load('/home/dim26fa/coding/training/logs_pcn_20240814_190055/best_l1_cd.pth')
+model = PCN(classifier=True)
 model_state_dict = model.state_dict()
 # Filter out layers with size mismatches
 filtered_checkpoint = {k: v for k, v in ckpt.items() if k in model_state_dict and model_state_dict[k].size() == v.size()}
@@ -33,12 +34,13 @@ final_conv_state_dict = model.final_conv.state_dict()
 decoder.final_conv.load_state_dict(final_conv_state_dict)
 data = np.load('saved_arrays.npz')
 loaded_arrays = [data[f'arr_{i}'] for i in range(len(data.files))]
-indices = [121, 122, 123, 124, 125, 126, 127, 128, 129, 130]
-indices = [129, 230, 231, 136, 340, 177]
+indices = [50, 60]
+indices = [1, 66, 23, 54]
 feat_ = [elem[2] for elem in pred2]
-extract = [feat_space[index] for index in indices]
+extract = [feature_space[index] for index in indices]
 extract_exp = [feat_space_exp[index] for index in indices]
 tensor_vectors = [torch.tensor(elem) for elem in extract]
+tensor_vectors = [torch.tensor(elem) for elem in feature_space]
 tensor_vectors = [torch.tensor(elem) for elem in extract_exp]
 stacked_ = torch.stack(tensor_vectors)
 # --------------------------------------------------
@@ -51,7 +53,7 @@ with torch.no_grad():
     avg_embedding_attention = attention(stacked_)
 average_vector = avg_embedding_attention.unsqueeze(0)
 # PointNet averaging? ------------------------------
-pointnet = PointNetForEmbeddings(input_dim=1024, hidden_dim=52, output_dim=1024)
+pointnet = PointNetForEmbeddings(input_dim=1024, hidden_dim=512, output_dim=1024)
 global_feature = pointnet(stacked_)
 average_vector = global_feature.unsqueeze(0)
 # --------------------------------------------------
@@ -119,6 +121,17 @@ def export_ply(filename, points):
     o3d.io.write_point_cloud(filename, pc, write_ascii=True)
 
 
+def load_pca_model(log_dir, epoch):
+    model_path = os.path.join(log_dir, f'pca_model_epoch_{epoch}.joblib')
+    if os.path.exists(model_path):
+        pca = load(model_path)
+        print(f"PCA model loaded from {model_path}")
+        return pca
+    else:
+        print(f"No PCA model found at {model_path}")
+        return None
+
+
 def test_single_category(model, device, test_config, log_dir, save=True):
     highest_shape = get_highest_shape(test_config['root_folder'], test_config['classes_to_use'])
 
@@ -142,7 +155,11 @@ def test_single_category(model, device, test_config, log_dir, save=True):
     total_l1_cd, total_l2_cd = 0.0, 0.0
     feature_space = list()
     labels_list = []
+    l1cd_list = []
+    l2cd_list = []
     with torch.no_grad():
+        out_classifier_list = []
+        labels_names = []
         for i, data in enumerate(test_dataloader):
             c = data['pc']
             c = c[:, :, :3]
@@ -151,31 +168,41 @@ def test_single_category(model, device, test_config, log_dir, save=True):
             c_anisotropic = data['pc_anisotropic']
             c_anisotropic = c_anisotropic[:, :, :3]
             mask_complete = data['pc_mask']
+            filename = os.path.basename(data['path'][0])
             label = data['label']
             p = p.permute(0, 2, 1)
             p, c, label = p.to(device), c.to(device), label.to(device)
             _, c_, feature_global, out_classifier = model(p)
             print('feature_space shape:', feature_global.shape)
             total_l1_cd += l1_cd(c_, c).item()
+            l1cd_list.append(l1_cd(c_, c).item())
             total_l2_cd += l2_cd(c_, c).item()
+            l2cd_list.append(l2_cd(c_, c).item())
             input_pc = p[0].detach().cpu().numpy()
             input_pc = np.transpose(input_pc, (1, 0))
             output_pc = c_[0].detach().cpu().numpy()
             gt = c[0].detach().cpu().numpy()
             label = data['label'].numpy()  # Assuming 'label' is present in your dataset
             labels_list.append(label)
+            labels_names.append(data['label_name'])
             if save:
-                export_ply(os.path.join(log_dir, '{:03d}_input.ply'.format(index)), input_pc)
-                export_ply(os.path.join(log_dir, '{:03d}_output.ply'.format(index)), output_pc)
-                export_ply(os.path.join(log_dir, '{:03d}_gt.ply'.format(index)), gt)
+                export_ply(os.path.join(log_dir, f'{index:03d}_input_{filename}.ply'), input_pc)
+                export_ply(os.path.join(log_dir, f'{index:03d}_output{filename}.ply'), output_pc)
+                export_ply(os.path.join(log_dir, f'{index:03d}_gt{filename}.ply'), gt)
             print('feature_global[0] shape is:', feature_global[0].shape)
             feature_space.append(feature_global[0].detach().cpu().numpy())
+            out_classifier = F.softmax(out_classifier, dim=1)
+            out_classifier_list.append(out_classifier.detach().cpu().numpy())
+
             index += 1
     avg_l1_cd = total_l1_cd / len(test_dataset)
     avg_l2_cd = total_l2_cd / len(test_dataset)
     #    avg_f_score = total_f_score / len(test_dataset)
     labels_array = np.concatenate(labels_list, axis=0)
-    return avg_l1_cd, avg_l2_cd, feature_space, labels_array
+    labels_names = np.concatenate(labels_names)
+    out_classifier_array = np.concatenate(out_classifier_list, axis=0)
+    predicted_class_array = np.argmax(out_classifier_array, axis=1)
+    return avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, out_classifier_array, predicted_class_array
 
 
 def test(config, save=True):
@@ -224,9 +251,9 @@ def test(config, save=True):
     print('\033[33m{:20s}{:20s}{:20s}\033[0m'.format('--------', '-----------', '-----------'))
 
     l1_cds, l2_cds = list(), list()
-    avg_l1_cd, avg_l2_cd, feature_space, labels_array = test_single_category(model, device, test_config, log_dir, save)
+    avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, out_classifier_array, pred_labels_array = test_single_category(model, device, test_config, log_dir, save)
     print('\033[32m{:20s}{:20.4f}{:20.4f}\033[0m'.format('All', avg_l1_cd * 1e3, avg_l2_cd * 1e4))
-    return avg_l1_cd, avg_l2_cd, feature_space, labels_array
+    return avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, out_classifier_array, pred_labels_array
 
 import torch
 import torch.nn as nn
@@ -245,6 +272,72 @@ class AttentionMechanism(nn.Module):
         # Compute the weighted average of embeddings
         return torch.sum(weights[:, None] * embeddings, dim=0)
 
+
+class AttentionAggregator(nn.Module):
+    def __init__(self, embedding_dim):
+        super(AttentionAggregator, self).__init__()
+        self.attention = nn.Linear(embedding_dim, 1)
+
+    def forward(self, embeddings):
+        # embeddings shape: (num_embeddings, embedding_dim)
+        attention_weights = F.softmax(self.attention(embeddings), dim=0)
+        aggregated_embedding = torch.sum(attention_weights * embeddings, dim=0)
+        return aggregated_embedding
+
+
+class MultiHeadAttentionAggregator(nn.Module):
+    def __init__(self, embedding_dim, num_heads=4, dropout=0.1):
+        super(MultiHeadAttentionAggregator, self).__init__()
+        self.num_heads = num_heads
+        self.attention = nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout)
+        self.layer_norm = nn.LayerNorm(embedding_dim)
+        self.ffn = nn.Sequential(
+            nn.Linear(embedding_dim, embedding_dim * 2),
+            nn.ReLU(),
+            nn.Linear(embedding_dim * 2, embedding_dim)
+        )
+        self.final_layer_norm = nn.LayerNorm(embedding_dim)
+
+    def forward(self, embeddings):
+        # embeddings shape: (num_embeddings, embedding_dim)
+        embeddings = embeddings.unsqueeze(1)  # Add sequence length dimension
+
+        # Self-attention
+        attn_output, _ = self.attention(embeddings, embeddings, embeddings)
+        attn_output = attn_output.squeeze(1)
+
+        # Add & Norm
+        normalized = self.layer_norm(embeddings.squeeze(1) + attn_output)
+
+        # Feed-forward network
+        ffn_output = self.ffn(normalized)
+
+        # Final Add & Norm
+        output = self.final_layer_norm(normalized + ffn_output)
+
+        return output.mean(dim=0)  # Average across embeddings
+
+def aggregate_embeddings(embeddings, aggregator, weights=None):
+    """
+    Aggregate a list of embeddings using the advanced aggregator.
+
+    Args:
+    embeddings (List[torch.Tensor]): List of embedding tensors
+    aggregator (MultiHeadAttentionAggregator): The aggregator module
+    weights (torch.Tensor, optional): Optional weights for each embedding
+
+    Returns:
+    torch.Tensor: The aggregated embedding
+    """
+    stacked_embeddings = torch.stack(embeddings)
+
+    if weights is not None:
+        assert len(weights) == len(embeddings), "Number of weights must match number of embeddings"
+        weights = weights.unsqueeze(1)  # Add dimension for broadcasting
+        stacked_embeddings = stacked_embeddings * weights
+
+    return aggregator(stacked_embeddings)
+
 class PointNetForEmbeddings(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(PointNetForEmbeddings, self).__init__()
@@ -262,6 +355,142 @@ class PointNetForEmbeddings(nn.Module):
         # x shape: (N, output_dim)
         x = torch.max(x, dim=0, keepdim=True)[0]  # Apply max pooling over the points (N)
         return x.squeeze(0)  # Remove the extra dimension added by keepdim=True
+
+
+def simple_aggregate_embeddings(embeddings):
+    """
+    Aggregate point cloud embeddings using element-wise median.
+
+    Args:
+    embeddings (List[torch.Tensor]): List of embedding tensors, each of shape (1024,)
+
+    Returns:
+    torch.Tensor: The aggregated embedding of shape (1024,)
+    """
+    # Stack embeddings
+    stacked_embeddings = torch.stack(embeddings)  # Shape: (num_embeddings, 1024)
+
+    # Compute element-wise median
+    aggregated_embedding = torch.median(stacked_embeddings, dim=0).values
+
+    return aggregated_embedding
+
+def percentile_aggregate_embeddings(embeddings, percentile=50):
+    stacked_embeddings = torch.stack(embeddings)
+    return torch.quantile(stacked_embeddings, q=percentile/100, dim=0).unsqueeze(0)
+
+def read_ply(file_path):
+    pcd = o3d.io.read_point_cloud(file_path)
+    return np.asarray(pcd.points)
+
+
+def calculate_chamfer_distances(folder_path):
+    from tqdm.auto import tqdm
+    from model_architectures.losses import cd_loss_l1
+    gt_files = sorted([f for f in os.listdir(folder_path) if 'gt' in f])
+    output_files = sorted([f for f in os.listdir(folder_path) if 'output' in f])
+
+    if len(gt_files) != len(output_files):
+        raise ValueError("Number of ground truth and output files do not match.")
+
+    chamfer_distances = []
+
+    for gt_file, output_file in tqdm(zip(gt_files, output_files), total=len(gt_files), desc="Processing"):
+        gt_path = os.path.join(folder_path, gt_file)
+        output_path = os.path.join(folder_path, output_file)
+
+        gt_points = read_ply(gt_path)
+        output_points = read_ply(output_path)
+
+        gt_tensor = torch.from_numpy(gt_points).float().unsqueeze(0)
+        output_tensor = torch.from_numpy(output_points).float().unsqueeze(0)
+
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        gt_tensor = gt_tensor.to(device)
+        output_tensor = output_tensor.to(device)
+        print(f"Ground Truth shape: {gt_tensor.shape}")
+        print(f"Output shape: {output_tensor.shape}")
+
+        distance = cd_loss_l1(gt_tensor, output_tensor)  # Using your existing CD function
+        chamfer_distances.append(distance)
+
+    return chamfer_distances
+
+
+def select_files_by_numbers(file_list, selected_numbers):
+    import re
+    """
+    Select files from a list based on specific numbers in their filenames.
+
+    Args:
+    file_list (List[str]): List of filenames
+    selected_numbers (List[int]): List of numbers to select files by
+
+    Returns:
+    List[str]: List of selected filenames
+    """
+    selected_files = []
+    for file in file_list:
+        # Extract numbers from the filename
+        numbers = re.findall(r'\d+', file)
+        if numbers:
+            # Check if any of the extracted numbers are in the selected_numbers list
+            if any(int(num) in selected_numbers for num in numbers):
+                selected_files.append(file)
+    return selected_files
+
+
+def calc_cd_avg_gts(gt_files, output_pcd, folder_path):
+    from model_architectures.losses import cd_loss_l1
+    cds_average = []
+    for gt_file in gt_files:
+        gt_path = os.path.join(folder_path, gt_file)
+        gt_points = read_ply(gt_path)
+        gt_tensor = torch.from_numpy(gt_points).float().unsqueeze(0)
+        output_tensor = torch.from_numpy(np.asarray(output_pcd.points)).float().unsqueeze(0)
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        gt_tensor = gt_tensor.to(device)
+        output_tensor = output_tensor.to(device)
+        distance = cd_loss_l1(gt_tensor, output_tensor)
+        cds_average.append(distance)
+    return cds_average
+
+
+import torch
+import heapq
+from typing import List
+
+
+def find_smallest_10_tensors(tensor_list: List[torch.Tensor]) -> List[tuple]:
+    """
+    Find the 10 smallest values from a list of single-value tensors.
+    Args:
+    tensor_list (List[torch.Tensor]): List of tensors, each containing a single value
+    Returns:
+    List[tuple]: The 10 smallest values with their indices in the format (index, value)
+    """
+    # Convert tensors to (index, value) pairs
+    indexed_values = [(i, tensor.item()) for i, tensor in enumerate(tensor_list)]
+    # Use heapq to efficiently find the 10 smallest elements
+    return heapq.nsmallest(10, indexed_values, key=lambda x: x[1])
+
+
+def calculate_mean_of_tensors(tensor_list: List[torch.Tensor]) -> float:
+    """
+    Calculate the mean of a list of tensors, each containing a single value.
+
+    Args:
+    tensor_list (List[torch.Tensor]): List of tensors, each with a single value
+
+    Returns:
+    float: The mean value
+    """
+    # Convert each tensor to a scalar and create a new tensor
+    values = torch.tensor([t.item() for t in tensor_list])
+
+    # Calculate and return the mean
+    return torch.mean(values).item()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Point Cloud Completion Testing')

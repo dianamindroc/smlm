@@ -9,6 +9,7 @@ import torch
 import torchvision
 import chamfer
 
+# Not used anymore in this repository. Can be used for reference.
 
 class ChamferFunction(torch.autograd.Function):
     @staticmethod

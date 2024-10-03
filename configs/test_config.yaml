@@ -34,4 +34,9 @@ test:
   save: True
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240529_122034/best_l1_cd.pth'
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240725_125117/best_l1_cd.pth'
-  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240730_105324/best_l1_cd.pth'
+  #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240730_105324/best_l1_cd.pth'
+  #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240807_163550/best_l1_cd.pth'
+  #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240812_124453/best_l1_cd.pth'
+  #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240814_165920/best_l1_cd.pth'
+  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240814_190055/best_l1_cd.pth'
+  # ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240819_100525/best_l1_cd.pth'

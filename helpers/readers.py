@@ -136,7 +136,8 @@ class Reader:
                               sep=';', index=False)
         return self.df_xy
 
-def read_mat_file(file, save = False, path=None):
+
+def read_mat_file(file, save=False, path=None):
     # this is only for the Heydarian dataset
     import scipy
     data = scipy.io.loadmat(file)
@@ -156,6 +157,7 @@ def read_mat_file(file, save = False, path=None):
                     os.mkdir(path)
             df.to_csv(os.path.join(path,name) + '.csv', index=False)
     return list
+
 
 class ReaderIMODfiles:
     """
@@ -194,7 +196,14 @@ class ReaderIMODfiles:
                 save_path = os.path.join(self.path_folder, name)
                 df.to_csv(save_path, index=False)
 
-def convert_ply_to_csv(path, save = False):
+
+def convert_ply_to_csv(path, save=False):
+    """
+    Function to convert .ply files to .csv files. If it is a path, it processes all files.
+    :param path: Path to data.
+    :param save: boolean to decide if to save the df. if True, saves the df in the same folder as .csv
+    :return: pandas DataFrame
+    """
     import open3d as o3d
     pcs = []
     #check if path is file or folder
@@ -216,6 +225,103 @@ def convert_ply_to_csv(path, save = False):
             return df
 
 
+def read_pc(path_or_arr):
+    """
+    Quick script for reading a point cloud either from path (.csv or .ply) or directly array
+    :param path_or_arr: path to point cloud or array
+    :return: array containing point cloud data
+    """
+    import numpy as np
+    if isinstance(path_or_arr, str) and path_or_arr.endswith('.csv'):
+        return np.array(pd.read_csv(path_or_arr)[['x', 'y', 'z']])
+    elif isinstance(path_or_arr, np.ndarray):
+        return path_or_arr
+    elif isinstance(path_or_arr, str) and path_or_arr.endswith('.ply'):
+        import open3d as o3d
+        pcd = o3d.io.read_point_cloud(path_or_arr)
+        return np.array(pcd.points)
 
 
+def read_by_sample(path, sample):
+    """
+    Read point clouds (ground truth and respective input and output) by sample number in the specified path.
+    :param path: path to read point clouds from.
+    :param sample: int representing sample number in the specified path.
+    :return: tuple containing ground truth, input and output with the specified number
+    """
+    import os
+    import glob
+    samples = glob.glob(os.path.join(path, f'*{sample}*'))
+    gt = next((read_pc(s) for s in samples if 'gt' in s), None)
+    inputt = next((read_pc(s) for s in samples if 'input' in s), None)
+    output = next((read_pc(s) for s in samples if 'output' in s), None)
+    return (gt, inputt, output, pd.DataFrame(gt, columns=['x', 'y', 'z']), pd.DataFrame(inputt, columns=['x', 'y', 'z']),
+            pd.DataFrame(output, columns=['x', 'y', 'z']))
 
+
+def read_pts_file(file_path):
+    """
+    Read a .pts file and return the points as a numpy array.
+    :param file_path: Path to the .pts file
+    Returns:
+    numpy.ndarray: Array of points, shape (n_points, n_dimensions)
+    """
+    import numpy as np
+    with open(file_path, 'r') as file:
+        # Skip the first two lines (header information)
+        next(file)
+        next(file)
+
+        # Read the remaining lines and extract the coordinates
+        points = []
+        for line in file:
+            x, y, z = map(float, line.split())
+            points.append([x, y, z])
+
+    return np.array(points)
+
+
+def remove_half_plane(pcd, axis='x', keep_positive=True):
+    import open3d as o3d
+    import numpy as np
+    """
+    Remove half of a point cloud along a specified axis.
+
+    Args:
+    pcd (o3d.geometry.PointCloud): Input point cloud
+    axis (str): Axis along which to cut ('x', 'y', or 'z')
+    keep_positive (bool): If True, keep the positive half; if False, keep the negative half
+
+    Returns:
+    o3d.geometry.PointCloud: Point cloud with half removed
+    """
+    points = np.asarray(pcd.points)
+
+    if axis.lower() == 'x':
+        axis_index = 0
+    elif axis.lower() == 'y':
+        axis_index = 1
+    elif axis.lower() == 'z':
+        axis_index = 2
+    else:
+        raise ValueError("Axis must be 'x', 'y', or 'z'")
+
+    # Find the median along the specified axis
+    median = np.median(points[:, axis_index])
+
+    if keep_positive:
+        mask = points[:, axis_index] >= median
+    else:
+        mask = points[:, axis_index] < median
+
+    # Create a new point cloud with the selected half
+    new_pcd = o3d.geometry.PointCloud()
+    new_pcd.points = o3d.utility.Vector3dVector(points[mask])
+
+    # Set the color of all points to light blue
+    num_points = len(new_pcd.points)
+    light_blue = np.array([0.6, 0.8, 1.0])  # RGB values for light blue
+    light_blue_colors = np.tile(light_blue, (num_points, 1))
+    new_pcd.colors = o3d.utility.Vector3dVector(light_blue_colors)
+
+    return new_pcd

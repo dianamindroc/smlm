@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 import os
 import open3d as o3d
-
 from helpers.data import get_label, read_pts_file, assign_labels
 
 
@@ -31,6 +30,9 @@ class Dataset(DS):
         :param remove_part_prob: defines the probability of removing a point from the point cloud. If 0, no points are removed.
         :param remove_outliers: boolean to decide if outliers should be removed or not
         :param remove_corners: boolean to decide if corners should be removed or not
+        :param anisotropy: boolean to decide if anisotropy should be applied or not
+        :param anisotropy_axis: defines the axis of anisotropy
+        :param anisotropy_factor: defines the anisotropy factor
         """
         super().__init__()
         if classes_to_use is None:
@@ -58,7 +60,8 @@ class Dataset(DS):
                 if file.endswith(self.suffix) and subdir.split('/')[-1] in self.classes_to_use:
                     self.filepaths.append(os.path.join(subdir, file))
 
-    def _rotate_data(self, point_cloud):
+    @staticmethod
+    def _rotate_data(point_cloud):
         # Define a random rotation matrix
         theta_x = np.random.uniform(0, 2 * np.pi)  # Rotation angle around x-axis
         theta_y = np.random.uniform(0, 2 * np.pi)  # Rotation angle around y-axis
@@ -104,65 +107,74 @@ class Dataset(DS):
             axis = 2
 
         augmented_point_cloud = np.copy(point_cloud)
-        augmented_point_cloud[:, axis] *= anisotropy_factor
+
+        # Generate and add noise to the anisotropic axis
+        noise = np.random.normal(0, anisotropy_factor, size=point_cloud.shape[0])
+        augmented_point_cloud[:, axis] += noise
+
         return augmented_point_cloud
 
     def _remove_points(self, point_cloud):
-        partial_pc = point_cloud
+        #Remove random points from the point cloud - replicate underlabeling
         num_points = len(point_cloud)
         remove_points_mask = np.random.choice([True, False], num_points, p=[self.p_remove_point , 1 - self.p_remove_point ])
         partial_pc = point_cloud[~remove_points_mask]
         return partial_pc
+
     @staticmethod
     def _remove_outliers(point_cloud):
+        # Remove outliers from the point cloud. Not used
         import hdbscan
-        clusterer = hdbscan.HDBSCAN(min_cluster_size=50, min_samples=None, algorithm='best', alpha=0.7,metric='euclidean')
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=50, min_samples=None, algorithm='best', alpha=0.7, metric='euclidean')
         cluster_labels = clusterer.fit_predict(point_cloud)
         from collections import Counter
         label_counts = Counter(cluster_labels)
         label_with_fewer_points = min(label_counts, key=label_counts.get)
         filtered_point_cloud = point_cloud[cluster_labels != label_with_fewer_points]
         return filtered_point_cloud
+
     @staticmethod
     def _remove_statistical_outliers(point_cloud, nb_neighbors=40, std_ratio=1.0):
-        # Assuming point_cloud is a NumPy array with shape (N, 5)
-        # where the first three columns are x, y, z coordinates
         spatial_data = point_cloud[:, :3]
-
         # Convert to Open3D point cloud object
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(spatial_data)
-
         # Remove outliers
         _, ind = pcd.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
         inlier_indices = np.asarray(ind)
-
         # Extract inlier rows from the original point cloud, keeping all columns
         inlier_cloud = point_cloud[inlier_indices, :]
-
         return inlier_cloud
 
-    def _remove_corners(self, point_cloud):
+    def _remove_corners(self, point_cloud, number_corners_to_remove=1):
+        # Remove specified number of corners from point clouds
         import hdbscan
-        clusterer = hdbscan.HDBSCAN(min_cluster_size=20, min_samples=None, algorithm='best', alpha=0.7, metric='euclidean')
-        cluster_labels = clusterer.fit_predict(point_cloud)
-        n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
-        p_remove_cluster = 0.5
+        import numpy as np
 
-        if np.random.rand() < p_remove_cluster and n_clusters > 0:
+        # Cluster the point cloud
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=20, min_samples=None, algorithm='best', alpha=0.7,
+                                    metric='euclidean')
+        cluster_labels = clusterer.fit_predict(point_cloud)
+        n_clusters = len(set(cluster_labels)) - (
+            1 if -1 in cluster_labels else 0)  # Exclude noise (-1) from cluster count
+
+        # Ensure we don't try to remove more clusters than exist
+        clusters_to_remove = min(number_corners_to_remove, n_clusters)
+
+        if n_clusters > 0:
             # Exclude noise label (-1) from the list of unique labels if it exists
             unique_clusters = set(cluster_labels)
             if -1 in unique_clusters:
                 unique_clusters.remove(-1)
             unique_clusters = list(unique_clusters)
 
-            # Randomly select a cluster to remove
-            cluster_to_remove = np.random.choice(unique_clusters)
+            # Randomly select the clusters to remove
+            clusters_to_remove = np.random.choice(unique_clusters, size=clusters_to_remove, replace=False)
 
-            # Create a mask for points to keep
-            mask = cluster_labels != cluster_to_remove
+            # Create a mask to keep points that are not in the selected clusters
+            mask = np.isin(cluster_labels, clusters_to_remove, invert=True)
 
-            # Apply the mask to keep only the points that are not in the selected cluster
+            # Apply the mask to keep only the points that are not in the selected clusters
             partial_pc = point_cloud[mask]
         else:
             partial_pc = self._remove_points(point_cloud)
@@ -175,25 +187,13 @@ class Dataset(DS):
     def __getitem__(self, index):
         filepath = self.filepaths[index]
         if 'csv' in self.suffix:
-        # Load data from file
+            # Load data from file
             arr = np.array(pd.read_csv(filepath))
         elif 'pts' in self.suffix:
             arr = read_pts_file(filepath)
         else:
             raise NotImplementedError("This data type is not implemented at the moment.")
         partial_arr = None
-        #target = (self.highest_shape, arr.shape[-1])
-        #padding = [(0, target[0] - arr.shape[0]), (0, 0)]
-        #padded_arr = np.pad(arr, padding)
-        # Process data into a tensor
-        #tensor_data = torch.tensor(padded_arr, dtype=torch.float)
-
-        # Save the tensor to a folder
-        #save_folder = os.path.join(self.root_folder, 'processed_data')
-        #if not os.path.exists(save_folder):
-        #    os.makedirs(save_folder)
-        #save_filepath = os.path.join(save_folder, f'{self.filename}_{index}.pt')
-        #torch.save(tensor_data, save_filepath)
 
         cls = os.path.dirname(filepath).split('/')[-1]
         if cls in self.classes_to_use:
@@ -201,17 +201,14 @@ class Dataset(DS):
         else:
             raise NotImplementedError("This label is not included in the current dataset.")
 
-            #       if self.data_augmentation:
-            #theta = np.random.uniform(0, np.pi * 2)
-            #rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-            #arr[:, [0, 2]] = arr[:, [0, 2]].dot(rotation_matrix)  # random rotation
-            #arr += np.random.normal(0, 0.02, size=arr.shape)  # random jitter
-            #   arr = self._rotate_data(arr)
         if self.remove_outliers:
             arr = self._remove_statistical_outliers(arr)
 
         if self.anisotropy:
-            arr_anisotropy = self._add_anisotropy(arr, self.anisotropy_factor, self.anisotropy_axis)
+            if 'exp' in filepath:
+                arr_anisotropy = arr
+            else:
+                arr_anisotropy = self._add_anisotropy(arr, self.anisotropy_factor, self.anisotropy_axis)
         else:
             arr_anisotropy = arr
 
@@ -223,10 +220,6 @@ class Dataset(DS):
                 partial_arr = self._remove_corners(arr_anisotropy)
             else:
                 partial_arr = self._remove_corners(arr)
-
-        # if self.remove_outliers:
-        #     arr = self._remove_statistical_outliers(arr)
-        #     partial_arr = self._remove_statistical_outliers(partial_arr)
 
         sample = {'pc': arr,
                   'pc_anisotropic': arr_anisotropy,

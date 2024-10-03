@@ -1,9 +1,7 @@
-#from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 import torch
 from model_architectures.chamfer_distance_updated import ChamferDistance
 import open3d as o3d
 import torch.nn as nn
-import torch.nn.functional as F
 from scipy.spatial import cKDTree
 from scipy.optimize import minimize
 
@@ -215,8 +213,7 @@ def safe_normalize(tensor):
         return (tensor - mean) / std
 
 
-#### Try it own version of density-aware
-
+# Various hand-crafted density aware losses - not used
 def gaussian_kernel(dist, bandwidth):
     return torch.exp(-0.5 * (dist / bandwidth) ** 2) / (bandwidth * torch.sqrt(torch.tensor(2 * torch.pi)))
 
@@ -299,8 +296,7 @@ class DensityAwareChamferLoss(nn.Module):
 
         return total_loss
 
-#TODO: clean up duplicate or useless things
-
+# Trying out Gaussian Mixture Model Loss - not used
 class GaussianMixtureLoss(nn.Module):
     def __init__(self, sigma=1.0):
         super(GaussianMixtureLoss, self).__init__()

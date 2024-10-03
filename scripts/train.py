@@ -11,13 +11,9 @@ from shutil import copyfile
 from helpers.data import get_highest_shape
 from helpers.logging import create_log_folder
 from helpers.visualization import save_plots
-from model_architectures import pcn, folding_net, pointr, losses
+from model_architectures import pcn, folding_net, losses
 from model_architectures.transforms import ToTensor, Padding
 from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric
-from dataset.SMLMDataset import Dataset
-from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
-from model_architectures.pointr import validate
-from chamferdist import ChamferDistance
 
 wandb.login()
 

@@ -1,5 +1,5 @@
 dataset:
-  root_folder: '/home/dim26fa/data/sim_dna_tetra_27072024/one_class_cube/'
+  root_folder: '/home/dim26fa/data/train_with_hey/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
@@ -9,15 +9,16 @@ dataset:
   remove_corners_prob: 0.5
   remove_outliers: True
   anisotropy: True
-  anisotropy_factor: 2.0
+  anisotropy_factor: 1.5
   anisotropy_axis: 'z'
   initial_alpha: 1.0
-  number_classes: 1
+  number_classes: 2
 model: 'pcn'
 train:
   lr: 0.0001
+  min_lr: 0.00001
   channels: 3
-  batch_size: 32
+  batch_size: 16
   num_workers: 0
   momentum: 0.9
   momentum2: 0.999
@@ -31,6 +32,7 @@ train:
   scheduler_patience: 10
   gamma: 0.0001 # for other than stepLR use smaller values e.g. 0.0001
   step_size: 50
+  grid_size: 4
   ignore_zeros: False
   augmentation: True
   initial_alpha:
@@ -43,6 +45,8 @@ train:
   lambda_reg: 0.01
   alpha_density: 0.5
   beta_sparsity: 0.02
+  num_dense: 16384
+  latent_dim: 1024
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

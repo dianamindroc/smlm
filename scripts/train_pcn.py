@@ -4,29 +4,28 @@ import torch
 import torch.optim as optim
 import wandb
 import os
-import torch.nn.functional as F
 from torchvision import transforms
 import numpy as np
 import random
 import open3d as o3d
 from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import matplotlib
+from joblib import dump
+
 matplotlib.use('Agg')
 
 from helpers.data import get_highest_shape
 from helpers.logging import create_log_folder
-from helpers.visualization import print_pc, save_plots
 from model_architectures import pcn, losses
 from model_architectures.transforms import ToTensor, Padding
-from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric, set_seed
+from model_architectures.utils import cfg_from_yaml_file, set_seed
 from dataset.SMLMDataset import Dataset
 from dataset.ShapeNet import ShapeNet
 from dataset.SMLMSimulator import DNAOrigamiSimulator
-#from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
-from model_architectures.pointr import validate
-#from chamferdist import ChamferDistance
 import warnings
+
 warnings.filterwarnings("ignore")
 
 
@@ -50,8 +49,6 @@ def train(config, exp_name=None, fixed_alpha=None):
         'scheduler_patience': config.train.scheduler_patience,
         'gamma': config.train.gamma,
         'step_size': config.train.step_size,
-        'coarse_dim': config.pcn_config.coarse_dim,
-        'fine_dim': config.pcn_config.fine_dim,
         'remove_part_prob': config.dataset.remove_part_prob,
         'dataset': config.dataset.dataset_type,
         'which_dataset': config.dataset.root_folder,
@@ -67,7 +64,11 @@ def train(config, exp_name=None, fixed_alpha=None):
         'beta_sparsity': config.train.beta_sparsity,
         'channels': config.train.channels,
         'remove_outliers': config.dataset.remove_outliers,
-        'gml_sigma': config.train.gml_sigma
+        'gml_sigma': config.train.gml_sigma,
+        'grid_size': config.train.grid_size,
+        'min_lr': config.train.min_lr,
+        'latent_dim': config.train.latent_dim,
+        'num_dense': config.train.num_dense
     }
     log_dir = create_log_folder(config.train.log_dir, config.model)
     print('Loading Data...')
@@ -86,7 +87,8 @@ def train(config, exp_name=None, fixed_alpha=None):
         dye_properties_dict = {
             'Alexa_Fluor_647': {'density_range': (10, 50), 'blinking_times_range': (10, 50),
                                 'intensity_range': (500, 5000),
-                                'precision_range': (0.5, 2.0)},
+                                'precision_range_xy': (0.5, 2.0),
+                                'precision_range_z': (3.0, 5.0)},
             # ... (other dyes)
         }
 
@@ -102,10 +104,10 @@ def train(config, exp_name=None, fixed_alpha=None):
                                transform=pc_transforms,
                                classes_to_use=classes,
                                data_augmentation=False,
-                               remove_part_prob = train_config['remove_part_prob'],
-                               remove_corners = train_config['remove_corners'],
-                               remove_outliers = train_config['remove_outliers'],
-                               anisotropy = train_config['anisotropy'],
+                               remove_part_prob=train_config['remove_part_prob'],
+                               remove_corners=train_config['remove_corners'],
+                               remove_outliers=train_config['remove_outliers'],
+                               anisotropy=train_config['anisotropy'],
                                anisotropy_axis=train_config['anisotropy_axis'],
                                anisotropy_factor=train_config['anisotropy_factor'])
     train_size = int(0.8 * len(full_dataset))
@@ -121,7 +123,8 @@ def train(config, exp_name=None, fixed_alpha=None):
     print('Device:', device)
 
     # model
-    model = pcn.PCN(num_dense=16384, latent_dim=1024, grid_size=4, classifier=train_config['classifier'],
+    model = pcn.PCN(num_dense=train_config['num_dense'], latent_dim=train_config['latent_dim'], grid_size=train_config['grid_size'],
+                    classifier=train_config['classifier'],
                     num_classes=config.dataset.number_classes, channels=train_config['channels']).to(device)
     # optimizer_recon
     #optimizer_recon = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(0.9, 0.999))
@@ -137,7 +140,6 @@ def train(config, exp_name=None, fixed_alpha=None):
                        list(model.mlp3.parameters()) + list(model.sigmoid_mlp.parameters())
         optimizer_mlp = optim.Adam(params_class, lr=0.0001, betas=(0.9, 0.999), weight_decay=1e-5)
 
-
     if train_config['scheduler_type'] != 'None':
         if train_config['scheduler_type'] == 'StepLR':
             scheduler_recon = optim.lr_scheduler.StepLR(optimizer_recon, step_size=train_config['step_size'],
@@ -147,10 +149,13 @@ def train(config, exp_name=None, fixed_alpha=None):
         else:
             scheduler_recon = optim.lr_scheduler.ReduceLROnPlateau(optimizer_recon, mode='min',
                                                                    factor=train_config['scheduler_factor'],
-                                                                   patience=train_config['scheduler_patience'], verbose=True)
+                                                                   patience=train_config['scheduler_patience'],
+                                                                   verbose=True)
             if train_config['classifier']:
-                scheduler_class = optim.lr_scheduler.ReduceLROnPlateau(optimizer_mlp, mode='min',factor=train_config['scheduler_factor'],
-                                                                   patience=train_config['scheduler_patience'], verbose=True)
+                scheduler_class = optim.lr_scheduler.ReduceLROnPlateau(optimizer_mlp, mode='min',
+                                                                       factor=train_config['scheduler_factor'],
+                                                                       patience=train_config['scheduler_patience'],
+                                                                       verbose=True)
         print('Scheduler activated')
 
     if os.path.exists(train_config['ckpt']):
@@ -176,10 +181,12 @@ def train(config, exp_name=None, fixed_alpha=None):
     best_epoch_l1 = -1
     train_step, val_step = 0, 0
     alpha = config.train.initial_alpha
-    loss1_improvement_threshold = config.train.loss1_improvement_threshold # Define your own threshold
+    loss1_improvement_threshold = config.train.loss1_improvement_threshold  # Define your own threshold
     loss1_history = []
     min_improvement_epochs = config.train.min_improvement_epochs  # Number of epochs to look back for improvement
     changed_lr = False
+    early_stop_counter = 0
+    early_stop_patience = config.train.early_stop_patience
     for epoch in range(1, train_config['num_epochs'] + 1):
         wandb.log({'epoch': epoch})
         # hyperparameter alpha
@@ -230,7 +237,8 @@ def train(config, exp_name=None, fixed_alpha=None):
                 dcd_loss2, cd_p2, cd_t2 = losses.calc_dcd(dense_pred, c)
                 loss = dcd_loss1.mean() + alpha * dcd_loss2.mean()
             elif train_config['loss'] == 'adapted':
-                from model_architectures.losses import _compute_density, _with_density, _sparsity_regularization, safe_normalize
+                from model_architectures.losses import _compute_density, _with_density, _sparsity_regularization, \
+                    safe_normalize
                 loss1 = losses.cd_loss_l1(coarse_pred, c)
                 loss2 = losses.cd_loss_l1(dense_pred, c)
                 cd_loss = loss1 + alpha * loss2
@@ -238,7 +246,8 @@ def train(config, exp_name=None, fixed_alpha=None):
                 density_gt = _compute_density(c)
                 density_loss = _with_density(dense_pred, c, density_pred, density_gt)
                 #sparsity_loss = torch.tensor(_sparsity_regularization(dense_pred, train_config['lambda_reg']))
-                loss = cd_loss + train_config['alpha_density'] * density_loss # + train_config['beta_sparsity'] * sparsity_loss
+                loss = cd_loss + train_config[
+                    'alpha_density'] * density_loss  # + train_config['beta_sparsity'] * sparsity_loss
                 #print(f'CD Loss: {cd_loss}, Density Loss: {density_loss}, Sparsity Loss: {sparsity_loss}')
             elif train_config['loss'] == 'own_dcd':
                 from model_architectures.losses import DensityAwareChamferLoss
@@ -277,7 +286,7 @@ def train(config, exp_name=None, fixed_alpha=None):
         wandb.log({'alpha': alpha})
         export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), dense_pred[0].detach().cpu().numpy())
         if train_config['loss'] == 'adapted':
-            del p, c, coarse_pred, dense_pred, cd_loss, density_pred, density_gt, loss, density_loss #, sparsity_loss
+            del p, c, coarse_pred, dense_pred, cd_loss, density_pred, density_gt, loss, density_loss  #, sparsity_loss
         torch.cuda.empty_cache()
         #export_ply(os.path.join(log_dir, '{:03d}.ply'.format(i)), np.transpose(dense_pred[0].detach().cpu().numpy(), (1,0)))
         #lr_schedual.step()
@@ -300,12 +309,14 @@ def train(config, exp_name=None, fixed_alpha=None):
                 c = data['pc']
                 p = data['partial_pc']
                 c_anisotropic = data['pc_anisotropic']
+                filenames = [os.path.basename(path) for path in data['path']]
                 if train_config['channels'] == 3:
                     c = c[:, :, :3]
                     p = p[:, :, :3]
                     c_anisotropic = c_anisotropic[:, :, :3]
                 mask_complete = data['pc_mask']
                 label = data['label']
+                # filename = os.path.basename(data['path'])
                 if train_config['autoencoder']:
                     c_per = c.permute(0, 2, 1)
                     c_per = c_per.to(device)
@@ -327,20 +338,37 @@ def train(config, exp_name=None, fixed_alpha=None):
 
                 mlp_loss = losses.mlp_loss_function(label, out_classifier)
                 if i == rand_iter:
+                    j = random.randint(0, len(filenames) - 1)
                     if train_config['autoencoder']:
-                        input_pc = c_anisotropic[0].detach().cpu().numpy()
+                        input_pc = c_anisotropic[j].detach().cpu().numpy()
                     else:
-                        input_pc = p[0].detach().cpu().numpy()
+                        input_pc = p[j].detach().cpu().numpy()
                     input_pc = np.transpose(input_pc, (1, 0))
-                    output_pc = dense_pred[0].detach().cpu().numpy()
-                    gt = c[0].detach().cpu().numpy()
-                    export_ply(os.path.join(log_dir, '{:03d}_input.ply'.format(epoch)), input_pc)
-                    export_ply(os.path.join(log_dir, '{:03d}_output.ply'.format(epoch)), output_pc)
-                    export_ply(os.path.join(log_dir, '{:03d}_gt.ply'.format(epoch)), gt)
-                    wandb.log({"point_cloud_val (gt, input, pred)":
-                                   [wandb.Object3D(gt[:,:3]),
-                                    wandb.Object3D(input_pc[:,:3]),
-                                    wandb.Object3D(output_pc[:,:3])]})
+                    output_pc = dense_pred[j].detach().cpu().numpy()
+                    gt = c[j].detach().cpu().numpy()
+                    coarse = coarse_pred[j].detach().cpu().numpy()
+
+                    sample_filename = filenames[j]
+
+                    # Export PLY files
+                    export_ply(os.path.join(log_dir, f'{epoch:03d}_input_{sample_filename}.ply'), input_pc)
+                    export_ply(os.path.join(log_dir, f'{epoch:03d}_output_{sample_filename}.ply'), output_pc)
+                    export_ply(os.path.join(log_dir, f'{epoch:03d}_gt_{sample_filename}.ply'), gt)
+                    export_ply(os.path.join(log_dir, f'{epoch:03d}_coarse_{sample_filename}.ply'), coarse)
+
+                    # Log to wandb
+                    wandb.log({
+                        "point_cloud_val": [
+                            wandb.Object3D(gt[:, :3]),
+                            wandb.Object3D(input_pc[:, :3]),
+                            wandb.Object3D(output_pc[:, :3])
+                        ],
+                        "logged_sample_filename": sample_filename,
+                        "epoch": epoch
+                    })
+
+
+            min_lr = train_config['min_lr']  # This allows 4 zeros after the decimal point, but not 5
 
             total_cd_l1 /= len(val_dataset)
             if train_config['scheduler_type'] != 'None':
@@ -350,19 +378,37 @@ def train(config, exp_name=None, fixed_alpha=None):
                         scheduler_class.step()
                 else:
                     prev_lr = optimizer_recon.param_groups[0]['lr']
-                    scheduler_recon.step(total_cd_l1)
-                    if train_config['classifier']:
-                        scheduler_class.step(mlp_loss)
-                    current_lr = optimizer_recon.param_groups[0]['lr']
-                    if prev_lr != current_lr:
-                        wandb.log({"lr": current_lr})
+
+                    # Check if the current learning rate is above the minimum before stepping
+                    if prev_lr > min_lr:
+                        scheduler_recon.step(total_cd_l1)
+                        if train_config['classifier']:
+                            scheduler_class.step(mlp_loss)
+
+                        current_lr = optimizer_recon.param_groups[0]['lr']
+
+                        # Ensure the new learning rate is not below the minimum
+                        if current_lr < min_lr:
+                            for param_group in optimizer_recon.param_groups:
+                                param_group['lr'] = min_lr
+                            current_lr = min_lr
+
+                        if prev_lr != current_lr:
+                            wandb.log({"lr": current_lr})
+                            print(f"Learning rate updated to: {current_lr:.5f}")
+                    else:
+                        print(f"Learning rate already at minimum: {prev_lr:.5f}")
             val_step += 1
 
-            print("Validate Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'], total_cd_l1 * 1e3))
+            print(
+                "Validate Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
+                                                                                      total_cd_l1 * 1e3))
             feature_array = np.vstack(feature_space)
             labels_array = np.concatenate(labels_list)
             labels_names = np.concatenate(labels_names)
             plot_tsne(feature_array, labels_array, labels_names, epoch, log_dir)
+            pca = plot_pca(feature_array, labels_array, labels_names, epoch, log_dir)
+            save_pca_model(pca, log_dir, epoch)
             wandb.log({'val_l1_cd': total_cd_l1 * 1e3})
             wandb.log({'mlp_loss': mlp_loss * 1e3})
 
@@ -370,6 +416,13 @@ def train(config, exp_name=None, fixed_alpha=None):
             best_epoch_l1 = epoch
             best_cd_l1 = total_cd_l1
             torch.save(model.state_dict(), os.path.join(log_dir, 'best_l1_cd.pth'))
+            early_stop_counter = 0
+        else:
+            early_stop_counter += 1
+
+        if early_stop_counter >= early_stop_patience:
+            print(f'Early stopping triggered. No improvement for {early_stop_patience} epochs.')
+            break
 
     torch.cuda.empty_cache()
     print('Best l1 cd model in epoch {}, the minimum l1 cd is {}'.format(best_epoch_l1, best_cd_l1 * 1e3))
@@ -389,10 +442,10 @@ def plot_tsne(features, labels, labels_names, epoch, log_dir):
     unique_labels = np.unique(labels)
     colors = plt.cm.get_cmap('nipy_spectral', len(unique_labels))
     for i, label in enumerate(unique_labels):
-    # Find points in this cluster
+        # Find points in this cluster
         idx = labels == label
         label_name = label_to_name[label]
-    # Plot these points with a unique color and label
+        # Plot these points with a unique color and label
         plt.scatter(tsne_results[idx, 0], tsne_results[idx, 1], c=[colors(i)], label=f'Cluster {label_name}')
     plt.title(f't-SNE visualization (Epoch {epoch})')
     plt.xlabel('t-SNE Dimension 1')
@@ -401,20 +454,63 @@ def plot_tsne(features, labels, labels_names, epoch, log_dir):
 
     # Save the plot with a specific filename format
     plt.savefig(os.path.join(log_dir, '{:03d}_tsne.png'.format(epoch)))
-     # Close the figure to free memory
+    # Close the figure to free memory
     plt.close()
+
+
+def plot_pca(features, labels, labels_names, epoch, log_dir, pca=None):
+    # Create a mapping from label to name
+    label_to_name = {label: name for label, name in zip(np.unique(labels), np.unique(labels_names))}
+
+    if pca is None:
+        pca = PCA(n_components=2)
+        pca_results = pca.fit_transform(features)
+    else:
+        pca_results = pca.transform(features)
+
+    # Perform PCA
+    pca = PCA(n_components=2)
+    pca_results = pca.fit_transform(features)
+
+    # Plot the results
+    unique_labels = np.unique(labels)
+    colors = plt.cm.get_cmap('nipy_spectral', len(unique_labels))
+
+    plt.figure(figsize=(10, 8))
+    for i, label in enumerate(unique_labels):
+        idx = labels == label
+        label_name = label_to_name[label]
+        plt.scatter(pca_results[idx, 0], pca_results[idx, 1], c=[colors(i)], label=f'Cluster {label_name}')
+
+    plt.title(f'PCA visualization (Epoch {epoch})')
+    plt.xlabel('First Principal Component')
+    plt.ylabel('Second Principal Component')
+    plt.legend()
+
+    # Save the plot
+    plt.savefig(f'{log_dir}/pca_visualization_epoch_{epoch}.png')
+    plt.close()
+
+    return pca
 
 
 def adjust_alpha(epoch):
     if epoch < 120:
-        alpha = 0.001 # was 0.01
+        alpha = 0.001  # was 0.01
     elif epoch < 200:
-        alpha = 0.005 # was 0.1, 0.02
+        alpha = 0.005  # was 0.1, 0.02
     elif epoch < 300:
-        alpha = 0.01 # was 0.5, 0.05
+        alpha = 0.01  # was 0.5, 0.05
     else:
-        alpha = 0.02 # was 1, 0.1
+        alpha = 0.02  # was 1, 0.1
     return alpha
+
+
+def save_pca_model(pca, log_dir, epoch):
+    model_path = os.path.join(log_dir, f'pca_model_epoch_{epoch}.joblib')
+    dump(pca, model_path)
+    print(f"PCA model saved to {model_path}")
+
 
 
 if __name__ == '__main__':

@@ -6,8 +6,17 @@ import pandas as pd
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
+
 class SMLMDnaOrigami:
-    def __init__(self, struct_type: str, number_dna_origami_samples: int, save_model=True, stats=None, apply_rotation=True):
+    """
+    Class to simulate a DNA origami
+    :param struct_type: string describing the type of structures. Choose from box, pyramid, tetrahedron, sphere.
+    :param number_dna_origami_samples: Number of DNA origami samples to simulate
+    :param stats: Dictionary of statistics about the DNA origami to use during simulation
+    :param apply_rotation: Boolean to apply the rotation to the DNA origami model structure
+    """
+
+    def __init__(self, struct_type: str, number_dna_origami_samples: int, stats=None, apply_rotation=True):
         self.struct_type = struct_type
         self.number_samples = number_dna_origami_samples
         self.dna_origami_list = []
@@ -38,8 +47,6 @@ class SMLMDnaOrigami:
         #self.uncertainty_factor = int(input("What is the uncertainty factor for the localizations?"))
         self.base_folder = input("Where to save the generated samples?")
         print('Going to generate ' + str(number_dna_origami_samples) + ' samples for ' + struct_type + '.')
-        if save_model:
-            self.save_model_structure()
         self.generate_all_dna_origami_smlm_samples()
 
     @staticmethod
@@ -86,11 +93,11 @@ class SMLMDnaOrigami:
         height = np.sqrt(2 / 3) * side_length
 
         # The radius of the circumscribed circle around the base triangle
-        base_radius = np.sqrt(3 / 9) * side_length
+        base_radius = side_length / np.sqrt(3)
 
         # Vertices of the tetrahedron
         vertices = [
-            (0, 0, np.sqrt(2 / 3) * side_length),  # Top vertex (apex)
+            (0, 0, height * 2/3),  # Top vertex (apex)
             (base_radius, 0, -height / 3),  # Base vertices
             (-base_radius / 2, base_radius * np.sqrt(3) / 2, -height / 3),
             (-base_radius / 2, -base_radius * np.sqrt(3) / 2, -height / 3)
@@ -116,19 +123,14 @@ class SMLMDnaOrigami:
         return coordinates
 
     def generate_points_3d(self, center, num_points):
-        """"
+        """
         Function to generate random points around a center
         :param center: the coordinates of the center
-        :param radius: the radius in which the points should be generated. The points will be generated inside the radius as well, not only at the radius
-        :param stats: the statistics used to generate the points inside the radius
         :param num_points: the number of points to generate
-        :param percentage: percentage of variation desired in the data
         :return: list of generated points
         """
         points = []
 
-        #threequarter = int(3/4*len(num_points))
-        #new_loc = int(num_points + random.uniform(-percentage, percentage))
         std_dev_df = pd.DataFrame([stats['std_dev'] for stats in self.stats], columns=['x', 'y', 'z'])
         overall_std_dev = std_dev_df.mean()
         std_x, std_y, std_z = overall_std_dev['x'], overall_std_dev['y'], overall_std_dev['z']
@@ -145,9 +147,14 @@ class SMLMDnaOrigami:
             #x = center[0] + r * math.sin(phi) * math.cos(theta)
             #y = center[1] + r * math.sin(phi) * math.sin(theta)
             #z = center[2] + r * math.cos(phi)
-            x = np.random.normal(center[0] + r * math.sin(phi) * math.cos(theta), std_x)
-            y = np.random.normal(center[1] + r * math.sin(phi) * math.sin(theta), std_y)
-            z = np.random.normal(center[2] + r * math.cos(phi), std_z)
+
+            photon_count = np.random.randint(1000, 5000)
+            precision_xy = 10 / np.sqrt(photon_count) * 1.5  # in nm
+            # precision_z = precision_xy * 2.5
+
+            x = np.random.normal(center[0] + r * math.sin(phi) * math.cos(theta), precision_xy)
+            y = np.random.normal(center[1] + r * math.sin(phi) * math.sin(theta), precision_xy)
+            z = np.random.normal(center[2] + r * math.cos(phi), precision_xy)
             uncertainty_factor_xy = np.random.uniform(0, 0.15)
             uncertainty_factor_z = np.random.uniform(0, 0.4)
             uncertainty_x = abs(r * math.sin(phi) * math.cos(theta) * uncertainty_factor_xy)
@@ -162,7 +169,7 @@ class SMLMDnaOrigami:
 
     def generate_one_dna_origami_smlm(self, num_points):
         # old version: model_structure: list, radius: int, num_localizations: int):
-        """"
+        """
         Function to generate a dna origami similar structure as from single-molecule localization microscopy (smlm)
         :param model_structure: the initial coordinates around which to generate random localizations. Typically list of tuples containing the x,y,z coordinates
         :param radius: the radius in which the localizations should be generated. The localizations will
@@ -193,6 +200,7 @@ class SMLMDnaOrigami:
             num_points = int(np.random.normal(mu, sigma))
             self.generate_one_dna_origami_smlm(num_points)
             self.save_samples(i)
+            self.save_model_structure(i)
             self.dna_origami = []
 
     def rotate_model(self):
@@ -201,22 +209,22 @@ class SMLMDnaOrigami:
         rotated_model = [tuple(corner) for corner in rotated_model]
         self.model_structure = rotated_model
 
-    def save_model_structure(self):
+    def save_model_structure(self, index: int):
         df_model_structure = pd.DataFrame(self.model_structure, columns=['x', 'y', 'z'])
-        df_model_structure.to_csv(self.base_folder + '/model_structure.csv', index=False)
+        df_model_structure.to_csv(self.base_folder + '/model_structure' + str(index) + '.csv', index=False)
 
     def save_samples(self, index: int):
-        #flattened_list = [element for sublist in zip(*self.dna_origami) for element in sublist]
+        # flattened_list = [element for sublist in zip(*self.dna_origami) for element in sublist]
         df_smlm_sample = pd.DataFrame(self.dna_origami, columns=['x', 'y', 'z', 'sigma_xy', 'sigmaz'])
         df_smlm_sample.to_csv(self.base_folder + '/smlm_sample' + str(index) + '.csv', index=False)
 
+
+    #TODO: move to visualization
     @staticmethod
     def plot_singular_structure(corners, color='blue'):
         """"
         :param corners: list of tuple containing the coordinates
         :param color: string describing the desired color to use for plotting, default is blue
-        :param axes_exists: bool explaining if there is already an axes to plot on; by default False
-        :param axes: plot object to plot on, by default None
         """
         matplotlib.use('TkAgg')
         if len(plt.get_fignums()) == 0:

@@ -1,7 +1,7 @@
 import numpy as np
-from torch.utils.data import Dataset
 from scipy.spatial.transform import Rotation as R
 import pandas as pd
+
 
 class DNAOrigamiSimulator:
     def __init__(self, num_samples, structure_type, dye_properties, stats, anisotropy_factor, transform=None):

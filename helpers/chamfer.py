@@ -5,7 +5,7 @@ import torch
 cd_l2 = ChamferDistanceL2()
 cd_l1 = ChamferDistanceL1()
 
-
+# Helper function to quickly get Chamfer Distance between 2 point clouds
 def compare_pc(pc1, pc2, cd_type, ignore_zeros=False):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     if cd_type == 'L1':

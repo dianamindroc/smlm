@@ -1,8 +1,12 @@
-# Copyright <2023> <https://github.com/qinglew/PCN-PyTorch>
+# PCN network inspired from: Copyright <2023> <https://github.com/qinglew/PCN-PyTorch>
+# Adapted by adding self-attention, dropout and adaptive folding
 
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+
+from model_architectures.attention import EnhancedSelfAttention
+from model_architectures.adaptive_folding import AdaptiveFolding, OptimizedFoldingModule
 
 
 class PCN(nn.Module):
@@ -45,7 +49,8 @@ class PCN(nn.Module):
             nn.Conv1d(512, self.latent_dim, 1)
         )
 
-        self.attention = SelfAttention2(self.latent_dim)
+        self.attention = EnhancedSelfAttention(self.latent_dim)
+        self.adaptive_folding = AdaptiveFolding(self.latent_dim)
 
         self.mlp = nn.Sequential(
             nn.Linear(self.latent_dim, 1024),
@@ -56,7 +61,7 @@ class PCN(nn.Module):
         )
 
         self.final_conv = nn.Sequential(
-            nn.Conv1d(1024 + self.channels + 2, 512, 1),
+            nn.Conv1d(self.latent_dim + self.channels + 2, 512, 1),
             nn.BatchNorm1d(512),
             nn.ReLU(inplace=True),
             nn.Conv1d(512, 512, 1),
@@ -75,6 +80,7 @@ class PCN(nn.Module):
         # Add layer normalization
         self.group_norm = nn.GroupNorm(32, latent_dim)
 
+
         a = torch.linspace(-0.05, 0.05, steps=self.grid_size, dtype=torch.float).view(1, self.grid_size).expand(
             self.grid_size, self.grid_size).reshape(1, -1)
         b = torch.linspace(-0.05, 0.05, steps=self.grid_size, dtype=torch.float).view(self.grid_size, 1).expand(
@@ -83,6 +89,7 @@ class PCN(nn.Module):
         self.folding_seed = torch.cat([a, b], dim=0).view(1, 2, self.grid_size ** 2).cuda()  # (1, 2, S)
 
         if self.classifier:
+            #self.classifiernet = ImprovedClassifier(self.latent_dim, self.num_classes)
             #MLP for binary classification
             self.mlp1 = nn.Linear(self.latent_dim, int(self.latent_dim/2))
             self.bn1_mlp = nn.BatchNorm1d(int(self.latent_dim/2))
@@ -99,6 +106,7 @@ class PCN(nn.Module):
            out_mlp = F.relu(self.bn1_mlp(self.mlp1(z)))  # input: z output: prediction
            out_mlp = F.relu(self.bn2_mlp(self.mlp2(out_mlp)))
            out_mlp = self.mlp3(out_mlp)
+           #out_mlp = self.sigmoid_mlp(out_mlp)
            return out_mlp
        else:
            return None
@@ -127,6 +135,7 @@ class PCN(nn.Module):
         # classifier
         if self.classifier:
             out_classifier = self.mlp_classification(feature_global_return)
+            #out_classifier = self.classifiernet(feature_global_return)
 
         # decoder
         coarse = self.mlp(feature_global_return).reshape(-1, self.num_coarse, self.channels)
@@ -137,15 +146,20 @@ class PCN(nn.Module):
 
         seed = self.folding_seed.unsqueeze(2).expand(B, -1, self.num_coarse, -1)  # (B, 2, num_coarse, S)
         seed = seed.reshape(B, -1, self.num_dense)  # (B, 2, num_fine)
-        #seed = self.folding_seed.expand(B, -1, self.num_dense)
+        # seed = self.folding_seed.expand(B, -1, self.num_dense)
         feature_global = feature_global_return.unsqueeze(2).expand(-1, -1, self.num_dense)  # (B, 1024, num_fine)
 
-        #skip = torch.cat([feature_global, feature_global1, seed, point_feat], dim=1)
+        # TODO: added this check if good
+        # attended_features = self.folding_attention(feature_global, seed)
+        # attended_features = attended_features.expand(-1, -1, self.num_dense)
+        # skip = torch.cat([feature_global, feature_global1, seed, point_feat], dim=1)
 
-        feat = torch.cat([feature_global, seed, point_feat], dim=1)  # (B, 1024+2+3, num_fine)
+        # feat = torch.cat([feature_global, seed, point_feat], dim=1)  # (B, 1024+2+3, num_fine)
+        folded_points = self.adaptive_folding(feature_global, seed)
+        feat = torch.cat([feature_global, seed, folded_points], dim=1)
 
         # Skip connection for final_conv
-        #skip_out = self.skip_conv(feat)
+        # skip_out = self.skip_conv(feat)
         if self.channels == 3:
             fine = self.final_conv(feat) + point_feat #+ 0.1 * skip_out
         else:
@@ -171,46 +185,22 @@ class PCN(nn.Module):
                 return (coarse_xyz.contiguous(), coarse_sigma.contiguous()), (fine_xyz, fine_sigma), feature_global_return
 
 
-class SelfAttention1(nn.Module):
-    def __init__(self, in_dim):
-        super(SelfAttention1, self).__init__()
-        self.query_conv = nn.Conv1d(in_dim, in_dim // 8, 1)
-        self.key_conv = nn.Conv1d(in_dim, in_dim // 8, 1)
-        self.value_conv = nn.Conv1d(in_dim, in_dim, 1)
-        self.gamma = nn.Parameter(torch.zeros(1))
+class ImprovedClassifier(nn.Module):
+    def __init__(self, latent_dim, num_classes, dropout_rate=0.3):
+        super(ImprovedClassifier, self).__init__()
+        self.classifier = nn.Sequential(
+            nn.Linear(latent_dim, latent_dim // 2),
+            nn.BatchNorm1d(latent_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout_rate),
 
-    def forward(self, x):
-        batch_size, C, N = x.size()
-        query = self.query_conv(x).permute(0, 2, 1)  # (B, N, C/8)
-        key = self.key_conv(x)  # (B, C/8, N)
-        value = self.value_conv(x)  # (B, C, N)
+            nn.Linear(latent_dim // 2, latent_dim // 4),
+            nn.BatchNorm1d(latent_dim // 4),
+            nn.ReLU(),
+            nn.Dropout(dropout_rate),
 
-        attention = torch.bmm(query, key)  # (B, N, N)
-        attention = F.softmax(attention, dim=-1)  # Normalize attention weights
+            nn.Linear(latent_dim // 4, num_classes),
+        )
 
-        out = torch.bmm(value, attention.permute(0, 2, 1))  # (B, C, N)
-        out = self.gamma * out + x
-        return out
-
-
-class SelfAttention2(nn.Module):
-    def __init__(self, in_channels):
-        super(SelfAttention2, self).__init__()
-        self.query = nn.Conv1d(in_channels, in_channels, 1)
-        self.key = nn.Conv1d(in_channels, in_channels, 1)
-        self.value = nn.Conv1d(in_channels, in_channels, 1)
-        self.gamma = nn.Parameter(torch.zeros(1))
-
-    def forward(self, x):
-        B, C, N = x.size()
-
-        proj_query = self.query(x).view(B, -1, N).permute(0, 2, 1)
-        proj_key = self.key(x).view(B, -1, N)
-        energy = torch.bmm(proj_query, proj_key)
-        attention = F.softmax(energy, dim=-1)
-        proj_value = self.value(x).view(B, -1, N)
-
-        out = torch.bmm(proj_value, attention.permute(0, 2, 1))
-        out = out.view(B, C, N)
-        out = self.gamma * out + x
-        return out
+    def forward(self, z):
+        return self.classifier(z)
