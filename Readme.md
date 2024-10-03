@@ -2,7 +2,7 @@
 
 This repository contains scripts, notebooks and helper functions for the "Towards enhanced particle averaging for single-molecule localization microscopy using geometric deep learning".  
 
-| [Installation](#-installation) | [Training](#-training) | [Inference](#-inference) | [Tutorial](#-tutorial-notebooks) | [Data simulation](#-data-simulation) | [Container](#-containerized simulation application) | [Contents](#-contents) |
+| [Installation](#installation) | [Training](#training) | [Inference](#inference) | [Tutorial](#tutorial-notebooks) | [Data simulation](#data-simulation) | [Container](#containerized-simulation-application) | [Contents](#contents) |
 
 #### Installation 
 Using mamba package manager, one can create a new environment for this repository and install the dependencies by running  
