@@ -26,7 +26,11 @@ To train a network, do :
 Set the path to the config file (e.g. configs/config.yaml), set an experiment name and, if desired, set a fixed_alpha. Alpha is used for setting a ratio between coarse and fine loss during training. If fixed alpha is set, the ratio stays always the same. Otherwise, it changes based on where we are during training, with later epochs considering a bigger ratio of the fine loss. 
 
 ***
+
 ### Inference
+
+
+***
 
 ### Tutorial notebooks
 We created tutorial notebooks for an easy understanding of the project.
@@ -41,7 +45,10 @@ We created tutorial notebooks for an easy understanding of the project.
 * Inference and visualization <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Inference_and_visualization.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
+
+
 ***
+
 ### Data simulation
 There are three ways to simulate data:
 
