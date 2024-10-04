@@ -68,8 +68,7 @@ To simulate using in-house script, go to scripts and run the `simulate_data.py` 
 `python simulate_data.py -s 'cube' -n 10 -rot True` where -s is structure desired, choose from cube, pyramid, tetrahedron, sphere; -n is number of samples to simulate and -rot is whether to rotate the model structure or not. Additional prompts will be displayed in the terminal. 
 
 #### 3. Containerized simulation application
-
-Prerequisites: [Singularity](https://sylabs.io/guides/3.0/user-guide/quick_start.html) installed on the host machine.
+ **_NOTE_** Prerequisites: [Singularity](https://sylabs.io/guides/3.0/user-guide/quick_start.html) installed on the host machine.
 
 The simulator is containerized in a Singularity container and can be obtained by building the container from the definition file provided in `/container/simulation.def` with the command 
 

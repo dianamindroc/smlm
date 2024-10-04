@@ -46,6 +46,7 @@ notebooks/Graph Autoencoder_files
 /container/training.sif
 /container/config.yaml
 /container/model
+/container/simulator_container.sif
 /requirements2.txt
 /req.txt
 
