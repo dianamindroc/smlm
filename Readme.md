@@ -28,6 +28,12 @@ We created tutorial notebooks for an easy understanding of the project.
 * Introduction and data simulation  <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Intro_and_data_simulation.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
+* Network training <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Network_training.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+* Inference and visualization <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Inference_and_visualization.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
 
 ### Data simulation
 There are two ways to simulate data:
@@ -42,7 +48,10 @@ To run the simulations from the command line, navigate to the scripts folder and
 Default number of simulated samples is 15. The default microscopy technique used for simulation parameters is dSTORM. Epitope density, recorded frames and detection efficiency are the simulation parameters that are randomly varied in specific ranges. To modify these ranges, navigate to `simulate_data.py` in `simulation` folder.
 
 #### 2. Simulation using script 
+To simulate using in-house script, go to scripts and run the `simulate_data.py` script e.g.
+`cd scripts`
 
+`python simulate_data.py -s 'cube' -n 10 -rot True` where -s is structure desired, choose from cube, pyramid, tetrahedron, sphere; -n is number of samples to simulate and -rot is whether to rotate the model structure or not. Additional prompts will be displayed in the terminal. 
 ### Containerized simulation application
 
 Prerequisites: [Singularity](https://sylabs.io/guides/3.0/user-guide/quick_start.html) installed on the host machine.
