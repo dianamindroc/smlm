@@ -1,7 +1,7 @@
 # Script to run simulations from the command line
 
 import argparse
-from simulation.simulate_data import simulate
+from simulation.simulate_suresim_data import simulate
 import yaml
 import timeit
 

@@ -45,6 +45,7 @@ notebooks/runs
 notebooks/Graph Autoencoder_files
 /container/training.sif
 /container/config.yaml
+/container/model
 /requirements2.txt
 /req.txt
 
