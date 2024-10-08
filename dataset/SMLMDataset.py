@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 import os
 import open3d as o3d
-from helpers.data import get_label, read_pts_file, assign_labels
+from helpers.data import get_label, assign_labels
+from helpers.readers import read_pts_file
 
 
 class Dataset(DS):
@@ -16,6 +17,7 @@ class Dataset(DS):
                        remove_part_prob=0.4,
                        remove_outliers=False,
                        remove_corners=False,
+                       number_corners_to_remove=1,
                        anisotropy=False,
                        anisotropy_axis='z',
                        anisotropy_factor=2.0):
@@ -50,6 +52,7 @@ class Dataset(DS):
         self.labels = assign_labels(root_folder)
         self.p_remove_point = remove_part_prob
         self.remove_corners = remove_corners
+        self.number_corners_to_remove = number_corners_to_remove
         self.anisotropy = anisotropy
         self.anisotropy_axis = anisotropy_axis
         self.anisotropy_factor = anisotropy_factor
@@ -217,9 +220,9 @@ class Dataset(DS):
 
         if self.remove_corners:
             if self.anisotropy:
-                partial_arr = self._remove_corners(arr_anisotropy)
+                partial_arr = self._remove_corners(arr_anisotropy, self.number_corners_to_remove)
             else:
-                partial_arr = self._remove_corners(arr)
+                partial_arr = self._remove_corners(arr, self.number_corners_to_remove)
 
         sample = {'pc': arr,
                   'pc_anisotropic': arr_anisotropy,

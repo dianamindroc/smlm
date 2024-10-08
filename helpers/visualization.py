@@ -823,6 +823,8 @@ def hist_projections_with_3d(point_cloud, grid_size=0.01, scatter_color='#1f77b4
 
     if title is not None:
         fig.suptitle(title, color='white', fontsize=16)
+    else:
+        title = 'figure'
 
     # 3D Scatter Plot
     ax_3d = fig.add_subplot(gs[0, 0], projection='3d')
@@ -953,7 +955,7 @@ def get_classification_metrics(true_labels, predicted_labels, plot=False):
     return metrics
 
 
-def plot_single_3d(point_clouds, background='black', point_sizes=None, figsize=(10, 8), alphas=None):
+def plot_single_3d(point_clouds, background='black', point_sizes=None, figsize=(10, 8), alphas=None, save=False):
     """
     Plot one or more 3D point clouds with a customizable background and fully visible bounding box.
 
@@ -974,6 +976,7 @@ def plot_single_3d(point_clouds, background='black', point_sizes=None, figsize=(
     if alphas is None:
         alphas = [0.5, 1.0]
 
+    title = 'Point cloud in 3D'
     fig = plt.figure(figsize=figsize, facecolor=background)
     ax = fig.add_subplot(111, projection='3d')
 
@@ -1026,6 +1029,12 @@ def plot_single_3d(point_clouds, background='black', point_sizes=None, figsize=(
 
     # Adjust the axes aspect ratio to be equal
     ax.set_box_aspect((1, 1, 1))
+
+    if save:
+        directory = '/home/dim26fa/graphics/smlms/'
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        plt.savefig(os.path.join(directory, title + '.png'), dpi=300, transparent=True)
 
     plt.show()
 

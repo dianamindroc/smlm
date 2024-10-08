@@ -8,8 +8,7 @@ import torch.nn as nn
 from pointnet2_ops import pointnet2_utils
 import yaml
 from easydict import EasyDict
-from pointnet2_ops.pointnet2_utils import furthest_point_sample, \
-    gather_operation, ball_query, three_nn, three_interpolate, grouping_operation
+from types import SimpleNamespace
 
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 import os
@@ -193,3 +192,18 @@ def set_seed(seed_value=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+def adjust_alpha(epoch):
+    if epoch < 120:
+        alpha = 0.001  # was 0.01
+    elif epoch < 200:
+        alpha = 0.005  # was 0.1, 0.02
+    elif epoch < 300:
+        alpha = 0.01  # was 0.5, 0.05
+    else:
+        alpha = 0.02  # was 1, 0.1
+    return alpha
+
+def export_ply(filename, points):
+    pc = o3d.geometry.PointCloud()
+    pc.points = o3d.utility.Vector3dVector(points[:, :3])
+    o3d.io.write_point_cloud(filename, pc, write_ascii=True)

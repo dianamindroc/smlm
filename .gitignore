@@ -20,6 +20,7 @@ scripts/*.def
 scripts/*.sif
 scripts/*.yaml
 scripts/quick_read.py
+scripts/scraps.py
 
 dataset/SMLMSimulatorStats.py
 

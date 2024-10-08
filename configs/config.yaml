@@ -6,7 +6,7 @@ dataset:
   remove_part_prob: 0.4
   dataset_type: 'tetra'
   remove_corners: True
-  remove_corners_prob: 0.5
+  number_corners_remove: 1
   remove_outliers: True
   anisotropy: True
   anisotropy_factor: 1.5

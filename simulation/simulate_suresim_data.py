@@ -60,7 +60,7 @@ def simulate(config, samples, tech, frames, split):
         recorded_frames = frames
 
     for file in os.listdir(config['models']):
-        if file.endswith('.wimp'):
+        if file.endswith('.wimp') or file.endswith('.txt'):
             model = file
             output_path = os.path.join(config['models'], file.split('.')[0])
             if not os.path.exists(output_path):
@@ -97,5 +97,7 @@ def simulate(config, samples, tech, frames, split):
                 for m in range(int(train), samples):
                     shutil.move(os.path.join(output_path, 'sample_'+str(m)), test_path)
         else:
+            print('Not implemented this type of models yet.')
             continue
+
 
