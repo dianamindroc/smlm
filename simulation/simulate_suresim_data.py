@@ -66,7 +66,7 @@ def simulate(config, samples, tech, frames, split):
             if not os.path.exists(output_path):
                 os.mkdir(output_path)
                 print('Current folder is ' + output_path)
-                shutil.move(os.path.join(config['models'] + file), output_path)
+                shutil.move(os.path.join(config['models'], file), output_path)
             else:
                 print('Folder exists: ' + output_path)
             for n in range(0, samples):
