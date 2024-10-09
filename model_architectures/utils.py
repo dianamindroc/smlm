@@ -9,7 +9,7 @@ from pointnet2_ops import pointnet2_utils
 import yaml
 from easydict import EasyDict
 from types import SimpleNamespace
-
+import open3d as o3d
 from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
 import os
 

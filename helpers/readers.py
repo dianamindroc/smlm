@@ -251,7 +251,9 @@ def read_by_sample(path, sample):
     """
     import os
     import glob
-    samples = glob.glob(os.path.join(path, f'*{sample}*'))
+    all_files = glob.glob(os.path.join(path, f'*{sample}*'))
+    samples = [f for f in all_files if sample in os.path.basename(f).split('_')[0]]
+
     gt = next((read_pc(s) for s in samples if 'gt' in s), None)
     inputt = next((read_pc(s) for s in samples if 'input' in s), None)
     output = next((read_pc(s) for s in samples if 'output' in s), None)

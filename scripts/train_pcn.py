@@ -53,6 +53,7 @@ def train(config, exp_name=None, fixed_alpha=None):
         'dataset': config.dataset.dataset_type,
         'which_dataset': config.dataset.root_folder,
         'remove_corners': config.dataset.remove_corners,
+        'num_corners_remove': config.dataset.number_corners_remove,
         'anisotropy': config.dataset.anisotropy,
         'anisotropy_factor': config.dataset.anisotropy_factor,
         'anisotropy_axis': config.dataset.anisotropy_axis,
@@ -109,7 +110,8 @@ def train(config, exp_name=None, fixed_alpha=None):
                                remove_outliers=train_config['remove_outliers'],
                                anisotropy=train_config['anisotropy'],
                                anisotropy_axis=train_config['anisotropy_axis'],
-                               anisotropy_factor=train_config['anisotropy_factor'])
+                               anisotropy_factor=train_config['anisotropy_factor'],
+                               number_corners_to_remove=train_config['num_corners_remove'])
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
@@ -295,6 +297,8 @@ def train(config, exp_name=None, fixed_alpha=None):
         model.eval()
         total_cd_l1 = 0.0
         labels_list = []
+        corner_label_list = []
+        corner_name = []
         feature_space = []
         labels_names = []
         with torch.no_grad():
@@ -316,6 +320,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                     c_anisotropic = c_anisotropic[:, :, :3]
                 mask_complete = data['pc_mask']
                 label = data['label']
+                corner_label = data['corner_label']
                 # filename = os.path.basename(data['path'])
                 if train_config['autoencoder']:
                     c_per = c.permute(0, 2, 1)
@@ -323,7 +328,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                     c_anisotropic = c_anisotropic.permute(0, 2, 1)
                     c_anisotropic = c_anisotropic.to(device)
                 p = p.permute(0, 2, 1)
-                p, c, label = p.to(device), c.to(device), label.to(device)
+                p, c, label, corner_label = p.to(device), c.to(device), label.to(device), corner_label.to(device)
                 if train_config['autoencoder']:
                     #coarse_pred, dense_pred, features, out_classifier = model(c_per)
                     coarse_pred, dense_pred, features, out_classifier = model(c_anisotropic)
@@ -331,6 +336,8 @@ def train(config, exp_name=None, fixed_alpha=None):
                     #coarse_pred, dense_pred, features, out_classifier = model(p)
                     coarse_pred, dense_pred, features, out_classifier = model(p)
                 labels_list.append(data['label'].numpy())
+                corner_label_list.append(data['corner_label'].numpy())
+                corner_name.append(data['corner_label_name'])
                 labels_names.append(data['label_name'])
                 feature_space.extend(features.detach().cpu().numpy())
                 cd_loss = losses.l1_cd(dense_pred, c).item()
@@ -405,8 +412,11 @@ def train(config, exp_name=None, fixed_alpha=None):
                                                                                       total_cd_l1 * 1e3))
             feature_array = np.vstack(feature_space)
             labels_array = np.concatenate(labels_list)
+            corner_array = np.concatenate(corner_label_list)
             labels_names = np.concatenate(labels_names)
+            corner_name = np.concatenate(corner_name)
             plot_tsne(feature_array, labels_array, labels_names, epoch, log_dir)
+            plot_tsne(feature_array, corner_array, corner_name, 111, log_dir)
             pca = plot_pca(feature_array, labels_array, labels_names, epoch, log_dir)
             save_pca_model(pca, log_dir, epoch)
             wandb.log({'val_l1_cd': total_cd_l1 * 1e3})
@@ -437,6 +447,7 @@ def export_ply(filename, points):
 def plot_tsne(features, labels, labels_names, epoch, log_dir):
     #color_map = {0: '#009999', 1: '#FFB266'}
     label_to_name = {label: name for label, name in zip(np.unique(labels), np.unique(labels_names))}
+
     tsne = TSNE(n_components=2)
     tsne_results = tsne.fit_transform(features)
     unique_labels = np.unique(labels)

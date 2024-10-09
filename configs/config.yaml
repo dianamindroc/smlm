@@ -1,12 +1,12 @@
 dataset:
-  root_folder: '/home/dim26fa/data/train_with_hey/'
+  root_folder: '/home/dim26fa/data/sim_dna_tetra_09102024/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
   remove_part_prob: 0.4
   dataset_type: 'tetra'
   remove_corners: True
-  number_corners_remove: 1
+  number_corners_remove: [0,1,2]
   remove_outliers: True
   anisotropy: True
   anisotropy_factor: 1.5

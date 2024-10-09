@@ -149,10 +149,19 @@ class Dataset(DS):
         inlier_cloud = point_cloud[inlier_indices, :]
         return inlier_cloud
 
-    def _remove_corners(self, point_cloud, number_corners_to_remove=1):
-        # Remove specified number of corners from point clouds
+    def _remove_corners(self, point_cloud, number_corners_to_remove):
         import hdbscan
         import numpy as np
+
+        # Check if number_corners_to_remove is a single integer or a list
+        if isinstance(number_corners_to_remove, int):
+            # If it's a single integer, use it directly
+            number_to_remove = number_corners_to_remove
+        elif isinstance(number_corners_to_remove, list):
+            # If it's a list, randomly choose one value from the list
+            number_to_remove = np.random.choice(number_corners_to_remove)
+        else:
+            raise ValueError("number_corners_to_remove must be either an integer or a list of integers.")
 
         # Cluster the point cloud
         clusterer = hdbscan.HDBSCAN(min_cluster_size=20, min_samples=None, algorithm='best', alpha=0.7,
@@ -162,7 +171,7 @@ class Dataset(DS):
             1 if -1 in cluster_labels else 0)  # Exclude noise (-1) from cluster count
 
         # Ensure we don't try to remove more clusters than exist
-        clusters_to_remove = min(number_corners_to_remove, n_clusters)
+        clusters_to_remove = min(number_to_remove, n_clusters)
 
         if n_clusters > 0:
             # Exclude noise label (-1) from the list of unique labels if it exists
@@ -180,9 +189,9 @@ class Dataset(DS):
             # Apply the mask to keep only the points that are not in the selected clusters
             partial_pc = point_cloud[mask]
         else:
-            partial_pc = self._remove_points(point_cloud)
+            partial_pc = point_cloud
 
-        return partial_pc
+        return partial_pc, number_to_remove
 
     def __len__(self):
         return len(self.filepaths)
@@ -220,16 +229,22 @@ class Dataset(DS):
 
         if self.remove_corners:
             if self.anisotropy:
-                partial_arr = self._remove_corners(arr_anisotropy, self.number_corners_to_remove)
+                partial_arr, corner = self._remove_corners(arr_anisotropy, self.number_corners_to_remove)
             else:
-                partial_arr = self._remove_corners(arr, self.number_corners_to_remove)
+                partial_arr, corner = self._remove_corners(arr, self.number_corners_to_remove)
+        else:
+            corner = 0
+
+        corner_to_label_name = {0: 'No Corners Removed', 1: 'One Corner Removed', 2: 'Two Corners Removed'}
 
         sample = {'pc': arr,
                   'pc_anisotropic': arr_anisotropy,
                   'partial_pc': partial_arr,
                   'label': np.array(label),
                   'path': filepath,
-                  'label_name': cls}
+                  'label_name': cls,
+                  'corner_label': np.array(corner),
+                  'corner_label_name': corner_to_label_name[corner]}
 
         if self.transform is not None:
             sample = self.transform(sample)
