@@ -228,12 +228,14 @@ class Dataset(DS):
             partial_arr = self._remove_points(arr)
 
         if self.remove_corners:
+            if 'exp' in filepath:
+                partial_arr, corner = arr, 0
             if self.anisotropy:
                 partial_arr, corner = self._remove_corners(arr_anisotropy, self.number_corners_to_remove)
             else:
                 partial_arr, corner = self._remove_corners(arr, self.number_corners_to_remove)
         else:
-            corner = 0
+            partial_arr, corner = arr, 0
 
         corner_to_label_name = {0: 'No Corners Removed', 1: 'One Corner Removed', 2: 'Two Corners Removed'}
 

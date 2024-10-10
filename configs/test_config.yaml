@@ -1,17 +1,18 @@
 dataset:
 
-  root_folder: '/home/dim26fa/data/DNA_TETRA/'
+  root_folder: '/home/dim26fa/data/test_sim_dna_tetra_10102024/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
   remove_part_prob: 0.4
   dataset_type: 'tetra'
   remove_corners: True
+  number_corners_remove: [0,1,2]
   remove_outliers: True
-  anisotropy: False
-  anisotropy_factor: 2.0
+  anisotropy: True
+  anisotropy_factor: 1.5
   anisotropy_axis: 'z'
-  number_classes: 1
+  number_classes: 3
 model: 'pcn'
 test:
   lr: 0.001

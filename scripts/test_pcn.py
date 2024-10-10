@@ -9,7 +9,7 @@ import torch.utils.data as Data
 import pandas as pd
 import torch.nn.functional as F
 
-from model_architectures import pcn
+from model_architectures.pcn import PCN
 from dataset.ShapeNet import ShapeNet
 from model_architectures.losses import l1_cd, l2_cd, f_score
 from helpers.logging import create_log_folder
@@ -21,7 +21,7 @@ from helpers.data import get_highest_shape
 from joblib import dump, load
 from model_architectures.pcn_decoder import PCNDecoderOnly
 
-ckpt = torch.load('/home/dim26fa/coding/training/logs_pcn_20240814_190055/best_l1_cd.pth')
+ckpt = torch.load('/home/dim26fa/coding/training/logs_pcn_20241009_225619/best_l1_cd.pth')
 model = PCN(classifier=True)
 model_state_dict = model.state_dict()
 # Filter out layers with size mismatches
@@ -148,13 +148,16 @@ def test_single_category(model, device, test_config, log_dir, save=True):
                            remove_outliers=test_config['remove_outliers'],
                            anisotropy=test_config['anisotropy'],
                            anisotropy_axis=test_config['anisotropy_axis'],
-                           anisotropy_factor=test_config['anisotropy_factor'])
+                           anisotropy_factor=test_config['anisotropy_factor'],
+                           number_corners_to_remove=test_config['num_corners_remove'])
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0)
 
     index = 1
     total_l1_cd, total_l2_cd = 0.0, 0.0
     feature_space = list()
     labels_list = []
+    corner_label_list = []
+    corner_name = []
     l1cd_list = []
     l2cd_list = []
     with torch.no_grad():
@@ -170,8 +173,9 @@ def test_single_category(model, device, test_config, log_dir, save=True):
             mask_complete = data['pc_mask']
             filename = os.path.basename(data['path'][0])
             label = data['label']
+            corner_label = data['corner_label']
             p = p.permute(0, 2, 1)
-            p, c, label = p.to(device), c.to(device), label.to(device)
+            p, c, label, corner_label = p.to(device), c.to(device), label.to(device), corner_label.to(device)
             _, c_, feature_global, out_classifier = model(p)
             print('feature_space shape:', feature_global.shape)
             total_l1_cd += l1_cd(c_, c).item()
@@ -185,6 +189,8 @@ def test_single_category(model, device, test_config, log_dir, save=True):
             label = data['label'].numpy()  # Assuming 'label' is present in your dataset
             labels_list.append(label)
             labels_names.append(data['label_name'])
+            corner_label_list.append(data['corner_label'].numpy())
+            corner_name.append(data['corner_label_name'])
             if save:
                 export_ply(os.path.join(log_dir, f'{index:03d}_input_{filename}.ply'), input_pc)
                 export_ply(os.path.join(log_dir, f'{index:03d}_output{filename}.ply'), output_pc)
@@ -200,9 +206,11 @@ def test_single_category(model, device, test_config, log_dir, save=True):
     #    avg_f_score = total_f_score / len(test_dataset)
     labels_array = np.concatenate(labels_list, axis=0)
     labels_names = np.concatenate(labels_names)
+    corner_array = np.concatenate(corner_label_list)
+    corner_name = np.concatenate(corner_name)
     out_classifier_array = np.concatenate(out_classifier_list, axis=0)
     predicted_class_array = np.argmax(out_classifier_array, axis=1)
-    return avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, out_classifier_array, predicted_class_array
+    return avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, corner_array, corner_name, out_classifier_array, predicted_class_array
 
 
 def test(config, save=True):
@@ -220,14 +228,15 @@ def test(config, save=True):
         'anisotropy_factor': config.dataset.anisotropy_factor,
         'anisotropy_axis': config.dataset.anisotropy_axis,
         'remove_outliers': config.dataset.remove_outliers,
-        'classifier': config.test.classifier}
+        'classifier': config.test.classifier,
+        'num_corners_remove': config.dataset.number_corners_remove}
     if save:
         log_dir = create_log_folder(config.test.log_dir, config.model)
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     # load pretrained model
-    model = pcn.PCN(16384, 1024, 4, classifier=test_config['classifier']).to(device)
+    model = PCN(16384, 1024, 4, classifier=test_config['classifier']).to(device)
     state_dict = torch.load(test_config['ckpt_path'])
     if 'mlp3.weight' in state_dict.keys():
         keys_to_remove = [
@@ -251,9 +260,9 @@ def test(config, save=True):
     print('\033[33m{:20s}{:20s}{:20s}\033[0m'.format('--------', '-----------', '-----------'))
 
     l1_cds, l2_cds = list(), list()
-    avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, out_classifier_array, pred_labels_array = test_single_category(model, device, test_config, log_dir, save)
+    avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, corner_array, corner_name, out_classifier_array, pred_labels_array = test_single_category(model, device, test_config, log_dir, save)
     print('\033[32m{:20s}{:20.4f}{:20.4f}\033[0m'.format('All', avg_l1_cd * 1e3, avg_l2_cd * 1e4))
-    return avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, out_classifier_array, pred_labels_array
+    return avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, corner_array, corner_name, out_classifier_array, pred_labels_array
 
 import torch
 import torch.nn as nn
@@ -461,7 +470,7 @@ import heapq
 from typing import List
 
 
-def find_smallest_10_tensors(tensor_list: List[torch.Tensor]) -> List[tuple]:
+def find_smallest_10_tensors(tensor_list):
     """
     Find the 10 smallest values from a list of single-value tensors.
     Args:

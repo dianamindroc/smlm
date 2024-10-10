@@ -14,6 +14,8 @@ Using mamba package manager, one can create a new environment for this repositor
 
 `pip install .` in the smlm folder 
 
+For installing Chamfer distance and pointnet2_ops: 
+
 ***
 
 ### Training
