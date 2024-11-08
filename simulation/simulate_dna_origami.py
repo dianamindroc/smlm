@@ -225,8 +225,17 @@ class SMLMDnaOrigami:
     def save_samples(self, index: int):
         # flattened_list = [element for sublist in zip(*self.dna_origami) for element in sublist]
         df_smlm_sample = pd.DataFrame(self.dna_origami, columns=['x', 'y', 'z', 'sigma_xy', 'sigmaz'])
-        df_smlm_sample.to_csv(self.base_folder + '/smlm_sample' + str(index) + '.csv', index=False)
+        # df_smlm_sample.to_csv(self.base_folder + '/smlm_sample' + str(index) + '.csv', index=False)
 
+        if hasattr(self, 'current_rotation'):  # We'll add this attribute in rotate_model
+            quat = self.current_rotation.as_quat()  # Gets 4 values [x,y,z,w]
+            # Add rotation columns to every row
+            df_smlm_sample['rot_x'] = quat[0]
+            df_smlm_sample['rot_y'] = quat[1]
+            df_smlm_sample['rot_z'] = quat[2]
+            df_smlm_sample['rot_w'] = quat[3]
+
+        df_smlm_sample.to_csv(self.base_folder + '/smlm_sample' + str(index) + '.csv', index=False)
 
     #TODO: move to visualization
     @staticmethod
