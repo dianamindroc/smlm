@@ -4,7 +4,6 @@ import random
 import math
 import pandas as pd
 import numpy as np
-from mpmath import randmatrix
 from scipy.spatial.transform import Rotation as R
 
 
@@ -17,9 +16,7 @@ class SMLMDnaOrigami:
     :param apply_rotation: Boolean to apply the rotation to the DNA origami model structure
     """
 
-    def __init__(self, struct_type: str, number_dna_origami_samples: int, stats=None, apply_rotation=True):
-        self.current_rotation = None
-        self.struct_type = struct_type
+    def __init__(self, model:str, number_dna_origami_samples: int, stats=None, apply_rotation=True):
         self.number_samples = number_dna_origami_samples
         self.dna_origami_list = []
         self.dna_origami = []
@@ -30,101 +27,15 @@ class SMLMDnaOrigami:
         else:
             self.stats = None
             print('You did not provide a stats file. Simulating without prior knowledge.')
-        if struct_type == 'cube':
-            x, y, z, size = [int(x) for x in input("Enter cube coordinates and maximum size (separate by space): ").split()]
-            self.model_structure = self.generate_cube(x, y, z, size)
-        elif struct_type == 'pyramid':
-            base, height = [int(x) for x in input("Enter pyramid base edge size and height (separate by space): ").split()]
-            self.model_structure = self.generate_pyramid(base, height)
-        elif struct_type == 'tetrahedron':
-            side = int(input("Enter tetrahedron side length: "))
-            self.model_structure = self.generate_tetrahedron(side)
-        elif struct_type == 'sphere':
-            radius, latitude_divisions, longitude_divisions = [int(x) for x in input("Enter sphere radius, "
-                                                                                     "nr. of latitude_divisions "
-                                                                                     "and nr. of longitude_divisions: ").split()]
-            self.model_structure = self.generate_sphere(radius, latitude_divisions, longitude_divisions)
-        else:
-            raise NotImplementedError("Only cube and pyramid supported at the moment :)")
+        df = pd.read_csv(model)
+        self.model_structure = [tuple(row) for row in df[['x', 'y', 'z']].values]
         #self.radius = int(input("What is the maximum radius in which to generate SMLM samples?"))
         #self.number_localizations, self.percentage = [int(x) for x in input("How many localizations to generate around each center and with which variation (separate by space)?").split()]
         #self.uncertainty_factor = int(input("What is the uncertainty factor for the localizations?"))
         self.base_folder = input("Where to save the generated samples?")
-        print('Going to generate ' + str(number_dna_origami_samples) + ' samples for ' + struct_type + '.')
+        print('Going to generate ' + str(number_dna_origami_samples) + ' samples for the given model.')
         self.generate_all_dna_origami_smlm_samples()
 
-    @staticmethod
-    def generate_cube(x: int, y: int, z: int, size: int):
-        """"
-        Generates a cube with the first corner at the x,y,z coordinates and a specific size
-        :param x: x coordinate
-        :param y: y coordinate
-        :param z: z coordinate
-        :param size: the size of one edge
-        :return: returns a list of tuples containing the coordinates
-        """
-        #size = random.choice(range(1, size))
-        corners = [(x, y, z),
-                   (x+size, y, z),
-                   (x+size, y+size, z),
-                   (x, y+size, z),
-                   (x, y, z+size),
-                   (x+size, y, z+size),
-                   (x+size, y+size, z+size),
-                   (x, y+size, z+size)]
-        return corners
-
-    @staticmethod
-    def generate_pyramid(base_side_length, height):
-        half_base = base_side_length / 2.0
-        corners = []
-        corners.append((0, height, 0))
-        corners.append((-half_base, 0, -half_base))
-        corners.append((half_base, 0, -half_base))
-        corners.append((half_base, 0, half_base))
-        corners.append((-half_base, 0, half_base))
-        return corners
-
-    @staticmethod
-    def generate_tetrahedron(side_length):
-        """
-        Generates a regular tetrahedron with the given side length.
-        The tetrahedron is centered at the origin.
-        :param side_length: The length of each edge of the tetrahedron.
-        :return: List of tuples containing the coordinates of the vertices.
-        """
-        # Calculate the height from the center of the base to the apex
-        height = np.sqrt(2 / 3) * side_length
-
-        # The radius of the circumscribed circle around the base triangle
-        base_radius = side_length / np.sqrt(3)
-
-        # Vertices of the tetrahedron
-        vertices = [
-            (0, 0, height * 2/3),  # Top vertex (apex)
-            (base_radius, 0, -height / 3),  # Base vertices
-            (-base_radius / 2, base_radius * np.sqrt(3) / 2, -height / 3),
-            (-base_radius / 2, -base_radius * np.sqrt(3) / 2, -height / 3)
-        ]
-
-        return vertices
-
-    @staticmethod
-    def generate_sphere(radius, latitude_divisions, longitude_divisions):
-        coordinates = []
-
-        for lat in range(latitude_divisions):
-            for lon in range(longitude_divisions):
-                theta = 2 * math.pi * lon / longitude_divisions
-                phi = math.pi * (lat + 0.5) / latitude_divisions
-
-                x = radius * math.sin(phi) * math.cos(theta)
-                y = radius * math.sin(phi) * math.sin(theta)
-                z = radius * math.cos(phi)
-
-                coordinates.append((x, y, z))
-
-        return coordinates
 
     def generate_points_3d(self, center, num_points):
         """
@@ -153,13 +64,20 @@ class SMLMDnaOrigami:
             #y = center[1] + r * math.sin(phi) * math.sin(theta)
             #z = center[2] + r * math.cos(phi)
 
-            photon_count = np.random.randint(1000, 5000)
-            precision_xy = 10 / np.sqrt(photon_count) * 1.5  # in nm
-            # precision_z = precision_xy * 2.5
+            if self.stats:
+                std_x = std_x
+                std_y = std_y
+                std_z = std_z
+            else:
+                photon_count = np.random.randint(1000, 5000)
+                std_x = 10 / np.sqrt(photon_count) * 1.5
+                std_y = 10 / np.sqrt(photon_count) * 1.5
+                std_z = 10 / np.sqrt(photon_count) * 1.5# in nm
+                # precision_z = precision_xy * 2.5
 
-            x = np.random.normal(center[0] + r * math.sin(phi) * math.cos(theta), precision_xy)
-            y = np.random.normal(center[1] + r * math.sin(phi) * math.sin(theta), precision_xy)
-            z = np.random.normal(center[2] + r * math.cos(phi), precision_xy)
+            x = np.random.normal(center[0] + r * math.sin(phi) * math.cos(theta), std_x)
+            y = np.random.normal(center[1] + r * math.sin(phi) * math.sin(theta), std_y)
+            z = np.random.normal(center[2] + r * math.cos(phi), std_z)
             uncertainty_factor_xy = np.random.uniform(0, 0.15)
             uncertainty_factor_z = np.random.uniform(0, 0.4)
             uncertainty_x = abs(r * math.sin(phi) * math.cos(theta) * uncertainty_factor_xy)
@@ -216,7 +134,6 @@ class SMLMDnaOrigami:
         rotated_model = random_rotation.apply(np.array(self.model_structure))
         rotated_model = [tuple(corner) for corner in rotated_model]
         self.model_structure = rotated_model
-        self.current_rotation = random_rotation
 
     def save_model_structure(self, index: int):
         df_model_structure = pd.DataFrame(self.model_structure, columns=['x', 'y', 'z'])

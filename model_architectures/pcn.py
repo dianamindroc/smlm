@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from model_architectures.attention import EnhancedSelfAttention
-from model_architectures.adaptive_folding import AdaptiveFolding, OptimizedFoldingModule
+from model_architectures.adaptive_folding import AdaptiveFolding, AdaptiveFolding2
 
 
 class PCN(nn.Module):
@@ -50,7 +50,7 @@ class PCN(nn.Module):
         )
 
         self.attention = EnhancedSelfAttention(self.latent_dim)
-        self.adaptive_folding = AdaptiveFolding(self.latent_dim)
+        self.adaptive_folding = AdaptiveFolding2(self.latent_dim)
 
         self.mlp = nn.Sequential(
             nn.Linear(self.latent_dim, 1024),
@@ -80,13 +80,28 @@ class PCN(nn.Module):
         # Add layer normalization
         self.group_norm = nn.GroupNorm(32, latent_dim)
 
-
+        ## original folding_seed
         a = torch.linspace(-0.05, 0.05, steps=self.grid_size, dtype=torch.float).view(1, self.grid_size).expand(
             self.grid_size, self.grid_size).reshape(1, -1)
         b = torch.linspace(-0.05, 0.05, steps=self.grid_size, dtype=torch.float).view(self.grid_size, 1).expand(
             self.grid_size, self.grid_size).reshape(1, -1)
 
         self.folding_seed = torch.cat([a, b], dim=0).view(1, 2, self.grid_size ** 2).cuda()  # (1, 2, S)
+        ## adapted folding seed
+        #base_x = torch.linspace(-0.05, 0.05, steps=self.grid_size, dtype=torch.float)
+        #base_y = torch.linspace(-0.05, 0.05, steps=self.grid_size, dtype=torch.float)
+
+        # Add small random perturbations
+        #noise_x = torch.randn_like(base_x) * 0.01
+        #noise_y = torch.randn_like(base_y) * 0.01
+
+        #base_x = base_x + noise_x
+        #base_y = base_y + noise_y
+
+        #grid_x, grid_y = torch.meshgrid(base_x, base_y)
+        #grid = torch.stack([grid_x, grid_y], dim=-1).reshape(1, -1, 2)
+        #self.folding_seed = grid.transpose(1, 2).cuda()
+
 
         if self.classifier:
             #self.classifiernet = ImprovedClassifier(self.latent_dim, self.num_classes)

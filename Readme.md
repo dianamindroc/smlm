@@ -30,7 +30,9 @@ Set the path to the config file (e.g. configs/config.yaml), set an experiment na
 ***
 
 ### Inference
+To test the network, do:
 
+`cd scripts`
 
 ***
 

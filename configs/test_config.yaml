@@ -1,6 +1,6 @@
 dataset:
 
-  root_folder: '/home/dim26fa/data/test_sim_dna_tetra_10102024/'
+  root_folder: '/home/dim26fa/data/test_dna_tetra_heydarian/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
@@ -9,10 +9,10 @@ dataset:
   remove_corners: True
   number_corners_remove: [0,1,2]
   remove_outliers: True
-  anisotropy: True
+  anisotropy: False
   anisotropy_factor: 1.5
   anisotropy_axis: 'z'
-  number_classes: 3
+  number_classes: 1
 model: 'pcn'
 test:
   lr: 0.001
@@ -39,5 +39,5 @@ test:
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240807_163550/best_l1_cd.pth'
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240812_124453/best_l1_cd.pth'
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240814_165920/best_l1_cd.pth'
-  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240814_190055/best_l1_cd.pth'
+  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20241009_225619/best_l1_cd.pth'
   # ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240819_100525/best_l1_cd.pth'

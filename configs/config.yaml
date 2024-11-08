@@ -1,9 +1,9 @@
 dataset:
-  root_folder: '/home/dim26fa/data/sim_dna_tetra_09102024/'
+  root_folder: '/home/dim26fa/data/sim_dna_tetra_31102024/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
-  remove_part_prob: 0.4
+  remove_part_prob: 0.6
   dataset_type: 'tetra'
   remove_corners: True
   number_corners_remove: [0,1,2]
@@ -25,11 +25,11 @@ train:
   num_epochs: 500
   loss: 'cd'
   gml_sigma: 2
-  early_stop_patience: 30
+  early_stop_patience: 50
   log_dir: '/home/dim26fa/coding/training'
   scheduler_type: reduce
   scheduler_factor: 0.75
-  scheduler_patience: 10
+  scheduler_patience: 20
   gamma: 0.0001 # for other than stepLR use smaller values e.g. 0.0001
   step_size: 50
   grid_size: 4

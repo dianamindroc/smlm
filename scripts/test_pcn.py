@@ -40,7 +40,7 @@ feat_ = [elem[2] for elem in pred2]
 extract = [feature_space[index] for index in indices]
 extract_exp = [feat_space_exp[index] for index in indices]
 tensor_vectors = [torch.tensor(elem) for elem in extract]
-tensor_vectors = [torch.tensor(elem) for elem in feature_space]
+tensor_vectors = [torch.tensor(elem) for elem in feat_space]
 tensor_vectors = [torch.tensor(elem) for elem in extract_exp]
 stacked_ = torch.stack(tensor_vectors)
 # --------------------------------------------------

@@ -200,9 +200,9 @@ class Dataset(DS):
         filepath = self.filepaths[index]
         if 'csv' in self.suffix:
             # Load data from file
-            arr = np.array(pd.read_csv(filepath))
+            arr = np.array(pd.read_csv(filepath))[:, :3]
         elif 'pts' in self.suffix:
-            arr = read_pts_file(filepath)
+            arr = read_pts_file(filepath)[:, :3]
         else:
             raise NotImplementedError("This data type is not implemented at the moment.")
         partial_arr = None
@@ -224,18 +224,20 @@ class Dataset(DS):
         else:
             arr_anisotropy = arr
 
-        if self.p_remove_point > 0 and self.remove_corners is False:
-            partial_arr = self._remove_points(arr)
 
         if self.remove_corners:
             if 'exp' in filepath:
                 partial_arr, corner = arr, 0
-            if self.anisotropy:
-                partial_arr, corner = self._remove_corners(arr_anisotropy, self.number_corners_to_remove)
             else:
-                partial_arr, corner = self._remove_corners(arr, self.number_corners_to_remove)
+                if self.anisotropy:
+                    partial_arr, corner = self._remove_corners(arr_anisotropy, self.number_corners_to_remove)
+                else:
+                    partial_arr, corner = self._remove_corners(arr, self.number_corners_to_remove)
         else:
-            partial_arr, corner = arr, 0
+            if self.p_remove_point > 0:
+                partial_arr, corner = self._remove_points(arr), 0
+            else:
+                partial_arr, corner = arr, 0
 
         corner_to_label_name = {0: 'No Corners Removed', 1: 'One Corner Removed', 2: 'Two Corners Removed'}
 

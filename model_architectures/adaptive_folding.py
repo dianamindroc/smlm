@@ -22,6 +22,49 @@ class AdaptiveFolding(nn.Module):
         return self.mlp(folding_input).permute(0, 2, 1)
 
 
+class AdaptiveFolding2(nn.Module):
+    def __init__(self, latent_dim):
+        super().__init__()
+        self.mlp1 = nn.Sequential(
+            nn.Conv1d(latent_dim + 2, 512, 1),
+            nn.BatchNorm1d(512),
+            nn.LeakyReLU(0.2),
+            nn.Conv1d(512, 512, 1),
+            nn.BatchNorm1d(512),
+            nn.LeakyReLU(0.2),
+        )
+
+        self.transform = nn.Sequential(
+            nn.Conv1d(512, 64, 1),
+            nn.BatchNorm1d(64),
+            nn.LeakyReLU(0.2),
+            nn.Conv1d(64, 3, 1),
+            nn.Tanh()  # Constrain deformation
+        )
+
+        # Add attention to focus on different parts of the feature
+        self.attention = nn.Sequential(
+            nn.Conv1d(512, 1, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, feat, seed):
+        feat = feat.expand(-1, -1, seed.size(2))
+        x = torch.cat([feat, seed], dim=1)
+
+        x = self.mlp1(x)
+        attention_weights = self.attention(x)
+        x = x * attention_weights
+
+        # Apply non-linear transformation to get 3D points directly
+        deformation = self.transform(x)
+
+        # Create 3D seed points by adding a zero z-coordinate
+        seed_3d = torch.cat([seed, torch.zeros_like(seed[:, :1, :])], dim=1)
+
+        return seed_3d + deformation
+        return seed_3d + deformation
+
 class OptimizedFoldingModule(nn.Module):
     def __init__(self, feature_dim, grid_dim=2, hidden_dim=256):
         super().__init__()

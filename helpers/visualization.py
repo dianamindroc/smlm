@@ -1362,7 +1362,100 @@ def hist_projections_with_model_and_centroid(point_cloud, model_structure, clust
     return centers_of_mass
 
 
-# TODO: these functions have to be checked. not used.
+class Cluster3DVisualizer:
+    def __init__(self, folder, file):
+        """
+        Initializes the object with the folder and file to be read.
+        :param folder: Path to the folder containing the file
+        :param file: Name of the file to be read
+        """
+        self.folder = folder
+        self.file = file
+        self.data = None
+
+    def read_txt(self, columns: int) -> pd.DataFrame:
+        """
+        Reads a .txt file containing raw localization data. Converts it to a DataFrame
+        :param columns: the number of columns to split the text file into
+        :return: pandas DataFrame
+        """
+        # Read the .txt file, skipping the first row (e.g., for headers or irrelevant data)
+        data = pd.read_csv(os.path.join(self.folder, self.file), skiprows=[0], header=None)
+
+        # Split the single-column data into the specified number of columns
+        data = data[data.columns[0]].str.split(' ', columns, expand=True)
+
+        # Store the DataFrame in the class instance
+        self.data = data
+
+
+    def cluster_and_visualize(self, min_cluster_size: int, size=1, viz = 'simple'):
+        import hdbscan
+        """
+        Perform HDBSCAN clustering on the data and visualize the results in 3D
+        :param min_cluster_size: Minimum cluster size for HDBSCAN
+        """
+        # Check if data is already loaded
+        if self.data is None:
+            raise ValueError("Data not loaded. Please use read_txt to load the data first.")
+
+        # Determine number of columns
+        num_columns = self.data.shape[1]
+        print(f"The file has {num_columns} columns.")
+
+        # Check if it's 3D (i.e., at least 3 columns)
+        if num_columns < 3:
+            raise ValueError("The file must have at least 3 columns for x, y, z coordinates.")
+
+        # Rename the first three columns to x, y, z for clarity
+        self.data.columns = [f'col_{i}' for i in range(num_columns)]
+        self.data = self.data.rename(columns={'col_0': 'x', 'col_1': 'y', 'col_2': 'z'})
+
+        # Extract the coordinates for clustering
+        coordinates = self.data[['x', 'y', 'z']].astype(float).values
+
+        # Perform HDBSCAN clustering with user-specified min_cluster_size
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size)
+        self.data['cluster'] = clusterer.fit_predict(coordinates)
+
+        # Filter out background points (cluster -1)
+        clustered_data = self.data[self.data['cluster'] != -1]
+
+        if viz == 'simple':
+            # Visualize clusters in 3D using Plotly with smaller point size
+            fig = px.scatter_3d(clustered_data, x='x', y='y', z='z', color='cluster',
+                                title=f'3D Clustering Visualization (min_cluster_size={min_cluster_size})',
+                                labels={'cluster': 'Cluster'},
+                                opacity=0.7)
+
+            # Make the points smaller
+            fig.update_traces(marker=dict(size=size))
+
+            fig.show()
+        elif viz == 'open3d':
+            points = clustered_data[['x', 'y', 'z']].values
+            labels = clustered_data['cluster'].values
+
+            # Create an Open3D point cloud object
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(points)
+
+            # Generate random colors for each cluster
+            max_label = labels.max()
+            colors = np.random.rand(max_label + 1, 3)
+            point_colors = np.array([colors[label] for label in labels])
+
+            # Assign colors to the point cloud
+            pcd.colors = o3d.utility.Vector3dVector(point_colors)
+
+            # Visualize the point cloud with clusters
+            o3d.visualization.draw_geometries([pcd],
+                                              window_name='3D Clustering Visualization with Open3D',
+                                              width=800, height=600)
+
+    # TODO: these functions have to be checked. not used.
+
+
 def calculate_tetrahedron_distances(cloud1, cloud2):
     from itertools import permutations
     cloud1 = np.array(cloud1)
