@@ -1,4 +1,4 @@
-### PhD Project _"Towards enhanced particle for single-molecule localization microscopy using geometric deep learning"_
+### PhD Project _"Towards enhanced particle averaging for single-molecule localization microscopy using geometric deep learning"_
 
 This repository contains scripts, notebooks and helper functions for the "Towards enhanced particle averaging for single-molecule localization microscopy using geometric deep learning".  
 
