@@ -13,6 +13,7 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import matplotlib
 from joblib import dump
+from scipy.spatial.transform import Rotation as R
 
 matplotlib.use('Agg')
 
@@ -209,6 +210,7 @@ def train(config, exp_name=None, fixed_alpha=None):
             c = data['pc']
             p = data['partial_pc']
             c_anisotropic = data['pc_anisotropic']
+            #rot = data['rotation']
             if train_config['channels'] == 3:
                 c = c[:, :, :3]
                 p = p[:, :, :3]
@@ -231,6 +233,23 @@ def train(config, exp_name=None, fixed_alpha=None):
             else:
                 #coarse_pred, dense_pred, _, out_classifier = model(p)
                 coarse_pred, dense_pred, _, out_classifier = model(p)
+
+            # try out rotations information
+            # rotated_reconstructions = []
+            # for i, rec in enumerate(dense_pred):
+            #     if dense_pred[i] is not None:  # Check if we have rotation for this sample
+            #         # Create rotation object
+            #         rotation = R.from_quat(rot[i].detach().cpu().numpy())  # Convert from tensor if needed
+            #         # Apply rotation to reconstructed points
+            #         rotated_rec = torch.tensor(rotation.apply(rec.detach().cpu().numpy()),
+            #                                                   dtype=torch.float32,
+            #                                                   device=rec.device,
+            #                                                   requires_grad=True)
+            #         rotated_reconstructions.append(rotated_rec)  # Back to tensor
+            #     else:
+            #         rotated_reconstructions.append(rec)
+            #
+            # rotated_reconstructions = torch.stack(rotated_reconstructions).to(device)
 
             # loss function
             if train_config['loss'] == 'dcd':
@@ -264,6 +283,8 @@ def train(config, exp_name=None, fixed_alpha=None):
             else:
                 loss1 = losses.cd_loss_l1(coarse_pred, c)
                 loss2 = losses.cd_loss_l1(dense_pred, c)
+                # loss1 = losses.cd_loss_l1(rotated_reconstructions, c)
+                # loss2 = losses.cd_loss_l1(rotated_reconstructions, c)
                 loss = loss1 + alpha * loss2
                 wandb.log({'coarse_loss': loss1 * 1e3})
                 wandb.log({'dense_loss': loss2 * 1e3})
@@ -302,7 +323,8 @@ def train(config, exp_name=None, fixed_alpha=None):
         feature_space = []
         labels_names = []
         with torch.no_grad():
-            rand_iter = random.randint(0, len(val_dataloader) - 1)  # for visualization
+            rand_iter = random.randint(0, len(val_dataloader) - 1)
+            # for visualization
             #### ShapeNet dataset
             #for i, (p, c) in enumerate(val_dataloader):
             #    p = p.permute(0, 2, 1)
@@ -313,6 +335,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                 c = data['pc']
                 p = data['partial_pc']
                 c_anisotropic = data['pc_anisotropic']
+                #rot = data['rotation']
                 filenames = [os.path.basename(path) for path in data['path']]
                 if train_config['channels'] == 3:
                     c = c[:, :, :3]
@@ -335,6 +358,24 @@ def train(config, exp_name=None, fixed_alpha=None):
                 else:
                     #coarse_pred, dense_pred, features, out_classifier = model(p)
                     coarse_pred, dense_pred, features, out_classifier = model(p)
+
+                # try out rotations information
+                #rotated_reconstructions = []
+                #for b, rec in enumerate(dense_pred):
+                #    if dense_pred[b] is not None:  # Check if we have rotation for this sample
+                        # Create rotation object
+                #        rotation = R.from_quat(rot[b].detach().cpu().numpy())  # Convert from tensor if needed
+                        # Apply rotation to reconstructed points
+                #        rotated_rec = torch.tensor(rotation.apply(rec.detach().cpu().numpy()),
+                #                                              dtype=torch.float32,
+                #                                              device=rec.device,
+                #                                              requires_grad=True)
+                #        rotated_reconstructions.append(rotated_rec)  # Back to tensor
+                #    else:
+                #        rotated_reconstructions.append(rec)
+
+                #rotated_reconstructions = torch.stack(rotated_reconstructions).to(device)
+
                 labels_list.append(data['label'].numpy())
                 corner_label_list.append(data['corner_label'].numpy())
                 corner_name.append(data['corner_label_name'])
@@ -342,7 +383,6 @@ def train(config, exp_name=None, fixed_alpha=None):
                 feature_space.extend(features.detach().cpu().numpy())
                 cd_loss = losses.l1_cd(dense_pred, c).item()
                 total_cd_l1 += cd_loss
-
                 mlp_loss = losses.mlp_loss_function(label, out_classifier)
                 if i == rand_iter:
                     j = random.randint(0, len(filenames) - 1)
@@ -352,6 +392,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                         input_pc = p[j].detach().cpu().numpy()
                     input_pc = np.transpose(input_pc, (1, 0))
                     output_pc = dense_pred[j].detach().cpu().numpy()
+                    #rotated_output = rotated_reconstructions[j].detach().cpu().numpy()
                     gt = c[j].detach().cpu().numpy()
                     coarse = coarse_pred[j].detach().cpu().numpy()
 
@@ -362,6 +403,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                     export_ply(os.path.join(log_dir, f'{epoch:03d}_output_{sample_filename}.ply'), output_pc)
                     export_ply(os.path.join(log_dir, f'{epoch:03d}_gt_{sample_filename}.ply'), gt)
                     export_ply(os.path.join(log_dir, f'{epoch:03d}_coarse_{sample_filename}.ply'), coarse)
+                    #export_ply(os.path.join(log_dir, f'{epoch:03d}_rotatedoutput_{sample_filename}.ply'), rotated_output)
 
                     # Log to wandb
                     wandb.log({

@@ -14,12 +14,29 @@ class AdaptiveFolding(nn.Module):
             nn.Linear(hidden_dim, 3)
         )
 
+    #def forward(self, features, grid):
+    #    B, C, N = features.shape
+    #    features = features.permute(0, 2, 1).expand(-1, grid.shape[2], -1)
+    #    grid = grid.permute(0, 2, 1).expand(B, -1, 2)
+    #    folding_input = torch.cat([features, grid], dim=-1)
+    #    return self.mlp(folding_input).permute(0, 2, 1)
+
     def forward(self, features, grid):
-        B, C, N = features.shape
-        features = features.permute(0, 2, 1).expand(-1, grid.shape[2], -1)
-        grid = grid.permute(0, 2, 1).expand(B, -1, 2)
-        folding_input = torch.cat([features, grid], dim=-1)
-        return self.mlp(folding_input).permute(0, 2, 1)
+        B, C, N = features.shape  # N is num_coarse
+
+
+        features = features.permute(0, 2, 1).expand(-1, N, -1)  # Ensure features align with num_coarse
+
+        # Ensure grid aligns correctly
+        grid = grid.permute(0, 2, 1).repeat(1, features.shape[1] // grid.shape[2], 1)
+
+
+        # Ensure shapes match for concatenation
+        folding_input = torch.cat([features, grid], dim=-1)  # (B, num_dense, feature_dim + 2)
+
+        folded_points = self.mlp(folding_input).permute(0, 2, 1)
+
+        return folded_points
 
 
 class AdaptiveFolding2(nn.Module):

@@ -15,12 +15,19 @@ dist/
 data/
 models/
 
+figures/
+
+simulation/new_sim.py
+simulation/sim_smlm_data.py
+simulation/simulate_smlm.py
+
 scripts/test.py
 scripts/*.def
 scripts/*.sif
 scripts/*.yaml
 scripts/quick_read.py
 scripts/scraps.py
+scripts/test_gpu.py
 
 dataset/SMLMSimulatorStats.py
 

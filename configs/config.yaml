@@ -1,5 +1,5 @@
 dataset:
-  root_folder: '/home/dim26fa/data/sim_dna_tetra_31102024/'
+  root_folder: '/home/dim26fa/data/sim_17022025/samples'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
@@ -9,7 +9,7 @@ dataset:
   number_corners_remove: [0,1,2]
   remove_outliers: True
   anisotropy: True
-  anisotropy_factor: 1.5
+  anisotropy_factor: 0.6
   anisotropy_axis: 'z'
   initial_alpha: 1.0
   number_classes: 2
@@ -32,7 +32,6 @@ train:
   scheduler_patience: 20
   gamma: 0.0001 # for other than stepLR use smaller values e.g. 0.0001
   step_size: 50
-  grid_size: 4
   ignore_zeros: False
   augmentation: True
   initial_alpha:
@@ -40,13 +39,15 @@ train:
   min_improvement_epochs: 10
   classifier: True
   pretrained: False
-  ckpt: ''
+  #ckpt: '/home/dim26fa/coding/training/logs_pcn_20241009_225619/best_l1_cd.pth'
+  ckpt: None
   autoencoder: False
   lambda_reg: 0.01
   alpha_density: 0.5
   beta_sparsity: 0.02
-  num_dense: 16384
+  num_dense: 2048
   latent_dim: 1024
+  grid_size: 2
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

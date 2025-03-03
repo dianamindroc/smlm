@@ -10,7 +10,7 @@ import yaml
 from easydict import EasyDict
 from types import SimpleNamespace
 import open3d as o3d
-from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
+from model_architectures.losses import l1_cd, l2_cd
 import os
 
 def show_point_cloud(point_cloud, axis=False):
@@ -166,14 +166,14 @@ def cfg_from_yaml_file(cfg_file):
 
 
 def l2_cd_metric(pcs1, pcs2):
-    dist1, dist2 = ChamferDistanceL2(pcs1, pcs2)
+    dist1, dist2 = l2_cd(pcs1, pcs2)
     dist1 = torch.mean(dist1, dim=1)
     dist2 = torch.mean(dist2, dim=1)
     return torch.sum(dist1 + dist2)
 
 
 def l1_cd_metric(pcs1, pcs2):
-    dist1, dist2 = ChamferDistanceL1(pcs1, pcs2)
+    dist1, dist2 = l1_cd(pcs1, pcs2)
     dist1 = torch.mean(torch.sqrt(dist1), 1)
     dist2 = torch.mean(torch.sqrt(dist2), 1)
     return torch.sum(dist1 + dist2) / 2

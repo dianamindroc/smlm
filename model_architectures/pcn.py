@@ -21,7 +21,7 @@ class PCN(nn.Module):
         num_coarse: 1024
     """
 
-    def __init__(self, num_dense=16384, latent_dim=1024, grid_size=4, classifier=False, num_classes=2, channels=3):
+    def __init__(self, num_dense=2048, latent_dim=1024, grid_size=2, classifier=False, num_classes=2, channels=3):
         super().__init__()
 
         self.num_dense = num_dense
@@ -50,7 +50,7 @@ class PCN(nn.Module):
         )
 
         self.attention = EnhancedSelfAttention(self.latent_dim)
-        self.adaptive_folding = AdaptiveFolding2(self.latent_dim)
+        self.adaptive_folding = AdaptiveFolding(self.latent_dim)
 
         self.mlp = nn.Sequential(
             nn.Linear(self.latent_dim, 1024),

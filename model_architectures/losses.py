@@ -4,7 +4,7 @@ import open3d as o3d
 import torch.nn as nn
 from scipy.spatial import cKDTree
 from scipy.optimize import minimize
-
+#from pytorch3d.loss import chamfer_distance
 
 CD = ChamferDistance()
 
@@ -23,7 +23,14 @@ def cd_loss_l1(pcs1, pcs2):
     dist1 = torch.sqrt(dist1)
     dist2 = torch.sqrt(dist2)
     return (torch.mean(dist1) + torch.mean(dist2)) / 2.0
+    #loss, (dist1, dist2) = chamfer_distance(pcs1, pcs2)
 
+    # Compute square root of per-point distances
+    #dist1 = torch.sqrt(dist1)
+    #dist2 = torch.sqrt(dist2)
+
+    # Return the mean Chamfer distance
+    #return (torch.mean(dist1) + torch.mean(dist2)) / 2.0
 
 def l1_cd(pcs1, pcs2):
     #loss = ChamferDistanceL1()
@@ -32,6 +39,14 @@ def l1_cd(pcs1, pcs2):
     dist1 = torch.mean(torch.sqrt(dist1), 1)
     dist2 = torch.mean(torch.sqrt(dist2), 1)
     return torch.sum(dist1 + dist2) / 2
+    #loss, (dist1, dist2) = chamfer_distance(pcs1, pcs2)
+
+    # Compute square root and mean over points
+    #dist1 = torch.mean(torch.sqrt(dist1), dim=1)
+    #dist2 = torch.mean(torch.sqrt(dist2), dim=1)
+
+    # Return final mean Chamfer loss
+    #return torch.sum(dist1 + dist2) / 2
 
 
 def l2_cd(pcs1, pcs2):

@@ -200,9 +200,21 @@ class Dataset(DS):
         filepath = self.filepaths[index]
         if 'csv' in self.suffix:
             # Load data from file
-            arr = np.array(pd.read_csv(filepath))[:, :3]
+            data = pd.read_csv(filepath)[['x', 'y', 'z']]
+            arr = np.array(data)[:, :3]
+            if all(col in data.columns for col in ['rot_x', 'rot_y', 'rot_z', 'rot_w']):
+                # Take first row since rotation should be same for all points
+                rotation = np.array([
+                    data['rot_x'].iloc[0],
+                    data['rot_y'].iloc[0],
+                    data['rot_z'].iloc[0],
+                    data['rot_w'].iloc[0]
+                ])
+            else:
+                rotation = None
         elif 'pts' in self.suffix:
             arr = read_pts_file(filepath)[:, :3]
+            rotation = None
         else:
             raise NotImplementedError("This data type is not implemented at the moment.")
         partial_arr = None
@@ -248,7 +260,10 @@ class Dataset(DS):
                   'path': filepath,
                   'label_name': cls,
                   'corner_label': np.array(corner),
-                  'corner_label_name': corner_to_label_name[corner]}
+                  'corner_label_name': corner_to_label_name[corner]
+                  }
+        if rotation is not None:
+            sample['rotation'] = rotation
 
         if self.transform is not None:
             sample = self.transform(sample)

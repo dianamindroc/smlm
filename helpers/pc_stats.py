@@ -1,5 +1,5 @@
 import numpy as np
-import open3d.cuda.pybind.io
+#import open3d.cuda.pybind.io
 import pandas as pd
 import os
 import seaborn as sns
@@ -9,7 +9,7 @@ import scipy
 
 
 # Functions to get statistics about datasets - e.g. about experimental datasets
-def analyze_point_cloud(point_cloud, min_cluster_size):
+def analyze_point_cloud(point_cloud, min_cluster_size, min_samples):
     """
     Method to analyze point cloud statistics.
     :param point_cloud: point cloud of shape (N, 3)
@@ -36,7 +36,10 @@ def analyze_point_cloud(point_cloud, min_cluster_size):
     eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix)
 
     # Cluster the points using HDBSCAN
-    hdbscan_clusterer = hdbscan.HDBSCAN(min_cluster_size)
+    if min_samples is not None:
+        hdbscan_clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples)
+    else:
+        hdbscan_clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size)
     cluster_labels = hdbscan_clusterer.fit_predict(point_cloud)
 
     # Identify unique clusters (excluding noise points labeled as -1)
@@ -67,15 +70,22 @@ def analyze_point_cloud(point_cloud, min_cluster_size):
     }
 
 
-def analyze_point_cloud_clusters(point_cloud, min_cluster_size):
+def analyze_point_cloud_clusters(point_cloud, min_cluster_size, min_samples):
     """
     Method to analyze clusters in a point cloud.
     :param point_cloud: point cloud of shape (N, 3)
     :param min_cluster_size: minimum number of points in a cluster, parameter for HDBSCAN
     :return: dict containing statistics for each cluster in the point cloud
     """
+    num_points = len(point_cloud)
+    sample_std = point_cloud.std()
+
     # Cluster the points using HDBSCAN
-    hdbscan_clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size)
+    if min_samples is not None:
+        hdbscan_clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples)
+    else:
+        hdbscan_clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size)
+
     cluster_labels = hdbscan_clusterer.fit_predict(point_cloud)
 
     # Initialize dictionary to hold statistics for each cluster
@@ -89,7 +99,7 @@ def analyze_point_cloud_clusters(point_cloud, min_cluster_size):
         cluster_points = point_cloud[cluster_labels == cluster]
 
         # Calculate statistics for this cluster
-        num_points = len(cluster_points)
+        cluster_size = len(cluster_points)
         centroid = cluster_points.mean(axis=0)
         std_dev = cluster_points.std(axis=0)
         var = cluster_points.var(axis=0)
@@ -104,12 +114,14 @@ def analyze_point_cloud_clusters(point_cloud, min_cluster_size):
         # Add statistics to the cluster stats dictionary
         cluster_stats[cluster] = {
             'num_points': num_points,
+            'cluster_size': cluster_size,
             'centroid': centroid,
-            'std_dev': std_dev,
+            'cluster_std': std_dev,
             'var': var,
             'bounding_box_size': bounding_box_size,
             'eigenvalues': eigenvalues,
-            'eigenvectors': eigenvectors
+            'eigenvectors': eigenvectors,
+            'sample_std': sample_std
         }
 
     return cluster_stats
@@ -130,7 +142,7 @@ def calculate_centroid_distances(centroids):
     return distances
 
 
-def load_and_analyze_point_clouds(directory, suffix='.csv', min_cluster_size=25, analyze='cluster'):
+def load_and_analyze_point_clouds(directory, suffix='.csv', min_cluster_size=25, min_samples=None, analyze='cluster'):
     """
     Load point clouds from a directory and analyze them.
     :param directory: path to directory containing point clouds
@@ -157,9 +169,9 @@ def load_and_analyze_point_clouds(directory, suffix='.csv', min_cluster_size=25,
         else:
             raise ValueError('Suffix must be .csv or .ply files')
         if analyze=='cluster':
-            stats = analyze_point_cloud_clusters(point_cloud, min_cluster_size)
+            stats = analyze_point_cloud_clusters(point_cloud, min_cluster_size, min_samples)
         else:
-            stats = analyze_point_cloud(point_cloud, min_cluster_size)
+            stats = analyze_point_cloud(point_cloud, min_cluster_size, min_samples)
         stats_list.append(stats)
 
     return stats_list

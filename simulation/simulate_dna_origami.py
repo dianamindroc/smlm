@@ -37,8 +37,9 @@ class SMLMDnaOrigami:
             base, height = [int(x) for x in input("Enter pyramid base edge size and height (separate by space): ").split()]
             self.model_structure = self.generate_pyramid(base, height)
         elif struct_type == 'tetrahedron':
-            side = int(input("Enter tetrahedron side length: "))
-            self.model_structure = self.generate_tetrahedron(side)
+            self.side = int(input("Enter tetrahedron side length: "))
+            self.k = float(input("Enter scaling factor for std_dev (relative to side length): "))
+            self.model_structure = self.generate_tetrahedron(self.side)
         elif struct_type == 'sphere':
             radius, latitude_divisions, longitude_divisions = [int(x) for x in input("Enter sphere radius, "
                                                                                      "nr. of latitude_divisions "
@@ -136,43 +137,57 @@ class SMLMDnaOrigami:
         points = []
 
         if self.stats:
-            std_dev_df = pd.DataFrame([stats['std_dev'] for stats in self.stats], columns=['x', 'y', 'z'])
-            overall_std_dev = std_dev_df.mean()
+            cluster_std_df = pd.DataFrame([points['cluster_std'] for statss in self.stats for points in statss.values()], columns=['x', 'y', 'z'])
+            overall_std_dev = cluster_std_df.mean()
             std_x, std_y, std_z = overall_std_dev['x'], overall_std_dev['y'], overall_std_dev['z']
-        for i in range(num_points):
-            #r = random.uniform(0, radius)
-            r = np.random.exponential(1.0)
-            theta = random.uniform(0, 2 * math.pi)
-            phi = random.uniform(0, math.pi)
-
-            #gaussian_values = np.random.normal(loc=0, scale=1, size=num_points)
-
-            #r *= gaussian_values
-
-            #x = center[0] + r * math.sin(phi) * math.cos(theta)
-            #y = center[1] + r * math.sin(phi) * math.sin(theta)
-            #z = center[2] + r * math.cos(phi)
-
+            sample_std_df = pd.DataFrame(
+                [points['sample_std'] for statss in self.stats for points in statss.values()], columns=['x', 'y', 'z'])
+            mean_sample_std = sample_std_df.mean()
+        else:
             photon_count = np.random.randint(1000, 5000)
-            precision_xy = 10 / np.sqrt(photon_count) * 1.5  # in nm
-            # precision_z = precision_xy * 2.5
+            std_x = 10 / np.sqrt(photon_count) * 1.5
+            std_y = 10 / np.sqrt(photon_count) * 1.5
+        for i in range(num_points):
+                #r = random.uniform(0, radius)
+                r = np.clip(np.random.exponential(self.k * self.side), 0, self.side)
+                theta = random.uniform(0, 2 * math.pi)
+                phi = random.uniform(0, math.pi)
 
-            x = np.random.normal(center[0] + r * math.sin(phi) * math.cos(theta), precision_xy)
-            y = np.random.normal(center[1] + r * math.sin(phi) * math.sin(theta), precision_xy)
-            z = np.random.normal(center[2] + r * math.cos(phi), precision_xy)
-            uncertainty_factor_xy = np.random.uniform(0, 0.15)
-            uncertainty_factor_z = np.random.uniform(0, 0.4)
-            uncertainty_x = abs(r * math.sin(phi) * math.cos(theta) * uncertainty_factor_xy)
-            uncertainty_y = abs(r * math.sin(phi) * math.sin(theta) * uncertainty_factor_xy)
-            uncertainty_z = abs(r * math.cos(phi) * uncertainty_factor_z)
+                photon_count = np.random.randint(1000, 5000)
+                std_xy = 10 / np.sqrt(photon_count) * 1.5  # in nm
+                # precision_z = precision_xy * 2.5
+                #combined_std = np.sqrt(std_dev**2 + std_xy**2)
+                std_z = np.mean([std_x, std_y])
+                x = np.random.normal(center[0] + r * math.sin(phi) * math.cos(theta), std_x)
+                y = np.random.normal(center[1] + r * math.sin(phi) * math.sin(theta), std_y)
+                z = np.random.normal(center[2] + r * math.cos(phi), std_z)
 
-            # Choose the maximum uncertainty as the point's overall uncertainty
-            overall_uncertainty_xy = np.average([uncertainty_x, uncertainty_y])
+                # ensure sample std
+                #sim_std = np.std(np.array([[x, y, z]]), axis=0)
+                #scale_factor = mean_sample_std / sim_std
 
-            points.append((x, y, z, overall_uncertainty_xy, uncertainty_z))
+                # Apply scaling
+                #x = center[0] + (x - center[0]) * scale_factor[0]
+                #y = center[1] + (y - center[1]) * scale_factor[1]
+                #z = center[2] + (z - center[2]) * scale_factor[2]
+
+                #points.append((x, y, z, overall_uncertainty_xy, uncertainty_z))
+
+                uncertainty_factor_xy = np.random.uniform(0, 0.15)
+                uncertainty_factor_z = np.random.uniform(0, 0.4)
+                uncertainty_x = abs(r * math.sin(phi) * math.cos(theta) * uncertainty_factor_xy)
+                uncertainty_y = abs(r * math.sin(phi) * math.sin(theta) * uncertainty_factor_xy)
+                uncertainty_z = abs(r * math.cos(phi) * uncertainty_factor_z)
+
+                # Choose the maximum uncertainty as the point's overall uncertainty
+                overall_uncertainty_xy = np.average([uncertainty_x, uncertainty_y])
+
+                points.append((x, y, z, overall_uncertainty_xy, uncertainty_z))
+
+
         return points
 
-    def generate_one_dna_origami_smlm(self, num_points):
+    def generate_one_dna_origami_smlm(self, sampled_cluster_sizes):
         # old version: model_structure: list, radius: int, num_localizations: int):
         """
         Function to generate a dna origami similar structure as from single-molecule localization microscopy (smlm)
@@ -183,30 +198,42 @@ class SMLMDnaOrigami:
         :return: returns list of generated localizations around the initial coordinates
         """
 
-        points_per_corner = np.random.multinomial(num_points, np.ones(len(self.model_structure))/len(self.model_structure))
+        #random_weights = np.random.random(len(self.model_structure))  # Random values for each corner
+        #probabilities = random_weights / np.sum(random_weights)
+        #points_per_corner = np.random.multinomial(num_points, probabilities)
+        #points_per_corner = np.random.multinomial(num_points, np.ones(len(self.model_structure))/len(self.model_structure))
 
         #radius = int(random.choice(range(1, self.radius)))
 #        for corner in self.model_structure:
 #            self.dna_origami.append(self.generate_points_3d(corner))
 #            self.dna_origami_list.append(self.dna_origami)
-        for corner, num_points in zip(self.model_structure, points_per_corner):
-            self.dna_origami.extend(self.generate_points_3d(corner, num_points))
+        for corner, num_points in zip(self.model_structure, sampled_cluster_sizes):
+            self.dna_origami.extend(self.generate_points_3d(corner, int(num_points)))
         return self.dna_origami
 
     def generate_all_dna_origami_smlm_samples(self):
+        np.random.seed(42)
         for i in range(self.number_samples):
             if self.apply_rotation:
                 self.rotate_model()
-            if self.stats:
-                num_points_list = [stats['num_points'] for stats in self.stats]
-                # Calculate mean (mu)
-                mu = np.mean(num_points_list)
-                # Calculate standard deviation (sigma)
-                sigma = np.std(num_points_list)
-                num_points = int(np.random.normal(mu, sigma))
-            else:
-                num_points = np.random.randint(400, 1400)
-            self.generate_one_dna_origami_smlm(num_points)
+            #if self.stats:
+            #    total_points_list = [sum(points['cluster_size'] for points in statss.values()) for statss in self.stats]
+                #num_points_list = [points['num_points'] for statss in self.stats for points in statss.values()]
+            #    # Calculate mean (mu)
+            #    mu = np.mean(total_points_list)
+            #    # Calculate standard deviation (sigma)
+            #    sigma = np.std(total_points_list)
+            #    num_points = int(np.random.normal(mu, sigma))
+            #else:
+            #    num_points = np.random.randint(400, 1400)
+            cluster_sizes = [pointsss['cluster_size']
+                             for statss in self.stats
+                             for pointsss in statss.values()
+                             if 'cluster_size' in pointsss]
+            cluster_sizesdf = np.array(cluster_sizes)
+            mu, sigma = np.mean(cluster_sizesdf), np.std(cluster_sizesdf)
+            sampled_cluster_sizes = np.random.normal(mu, sigma, len(self.model_structure))
+            self.generate_one_dna_origami_smlm(sampled_cluster_sizes)
             self.save_samples(i)
             self.save_model_structure(i)
             self.dna_origami = []
@@ -220,7 +247,7 @@ class SMLMDnaOrigami:
 
     def save_model_structure(self, index: int):
         df_model_structure = pd.DataFrame(self.model_structure, columns=['x', 'y', 'z'])
-        df_model_structure.to_csv(self.base_folder + '/model_structure' + str(index) + '.csv', index=False)
+        df_model_structure.to_csv(self.base_folder + '/model' + '/model_structure' + str(index) + '.csv', index=False)
 
     def save_samples(self, index: int):
         # flattened_list = [element for sublist in zip(*self.dna_origami) for element in sublist]
