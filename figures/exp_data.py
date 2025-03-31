@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import hdbscan
 import seaborn as sns
 from scipy.stats import rayleigh, norm, maxwell
+from scipy.ndimage import gaussian_filter
+
 
 def plot_xy_xz_histograms(data, grid_size=0.01, cmap='hot', save_to=None):
     """
@@ -50,6 +52,9 @@ def plot_xy_xz_histograms(data, grid_size=0.01, cmap='hot', save_to=None):
         hist_xy = np.sum(hist, axis=2)  # Projection onto XY plane
         hist_xz = np.sum(hist, axis=1)  # Projection onto XZ plane
 
+        hist_xy = gaussian_filter(hist_xy, sigma=1)
+        hist_xz = gaussian_filter(hist_xz, sigma=1)
+
         # Visualize the XY and XZ projections
         fig, axs = plt.subplots(1, 2, figsize=(12, 6))
 
@@ -58,12 +63,16 @@ def plot_xy_xz_histograms(data, grid_size=0.01, cmap='hot', save_to=None):
         axs[0].set_title('XY Projection')
         axs[0].set_xlabel('X')
         axs[0].set_ylabel('Y')
+        #axs[0].set_xticks([])  # Remove ticks
+        #axs[0].set_yticks([])
 
         # XZ Projection
         axs[1].imshow(hist_xz.T, origin='lower', extent=[x_min, x_max, z_min, z_max], aspect='auto', cmap=cmap)
         axs[1].set_title('XZ Projection')
         axs[1].set_xlabel('X')
         axs[1].set_ylabel('Z')
+        #axs[1].set_xticks([])  # Remove ticks
+        #axs[1].set_yticks([])
 
         plt.tight_layout()
 
@@ -84,7 +93,103 @@ def plot_xy_xz_histograms(data, grid_size=0.01, cmap='hot', save_to=None):
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 
-def plot_multiple_projections(data_list, grid_size=0.01, cmap='hot', save_to=None):
+
+def plot_xy_xz_histograms(data, grid_size=0.01, model_structure=None, cmap='hot', save_to=None):
+    """
+    Plot XY and XZ histogram projections from a 3D point cloud and overlay model_structure if provided.
+
+    Parameters:
+    - data (str | pd.DataFrame | np.ndarray): File path, DataFrame, or NumPy array of shape Nx3.
+    - grid_size (float): Size of the histogram bins.
+    - model_structure (np.ndarray | None): Optional 4x3 array to overlay on the projections.
+    - cmap (str): Color map for the histogram.
+    - save_to (str | None): File path to save the plot. If None, the plot is shown.
+    """
+    try:
+        # Handle input data
+        if isinstance(data, str):
+            data = pd.read_csv(data)
+        elif isinstance(data, pd.DataFrame):
+            pass
+        elif isinstance(data, np.ndarray):
+            if data.shape[1] != 3:
+                raise ValueError("Input array must have 3 columns (x, y, z).")
+            data = pd.DataFrame(data, columns=['x', 'y', 'z'])
+        else:
+            raise ValueError("Data must be a file path, DataFrame, or NumPy array.")
+
+        if not all(col in data.columns for col in ['x', 'y', 'z']):
+            raise ValueError("Data must contain 'x', 'y', and 'z' columns.")
+
+        # Extract point cloud
+        point_cloud = data[['x', 'y', 'z']].to_numpy()
+
+        # Define bounds and bins
+        x_min, x_max = np.min(point_cloud[:, 0]), np.max(point_cloud[:, 0])
+        y_min, y_max = np.min(point_cloud[:, 1]), np.max(point_cloud[:, 1])
+        z_min, z_max = np.min(point_cloud[:, 2]), np.max(point_cloud[:, 2])
+
+        # Update min/max to include both point cloud and model_structure
+        if model_structure is not None and model_structure.shape == (4, 3):
+            x_min = min(x_min, np.min(model_structure[:, 0]))
+            x_max = max(x_max, np.max(model_structure[:, 0]))
+            y_min = min(y_min, np.min(model_structure[:, 1]))
+            y_max = max(y_max, np.max(model_structure[:, 1]))
+            z_min = min(z_min, np.min(model_structure[:, 2]))
+            z_max = max(z_max, np.max(model_structure[:, 2]))
+
+        x_bins = int((x_max - x_min) / grid_size) + 1
+        y_bins = int((y_max - y_min) / grid_size) + 1
+        z_bins = int((z_max - z_min) / grid_size) + 1
+
+        # 3D histogram and projections
+        hist, _ = np.histogramdd(point_cloud, bins=[x_bins, y_bins, z_bins])
+        hist_xy = gaussian_filter(np.sum(hist, axis=2), sigma=1)
+        hist_xz = gaussian_filter(np.sum(hist, axis=1), sigma=1)
+
+        base_alpha = 0.5 if model_structure is not None else 1.0
+
+        # Plotting
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+
+        # XY Projection
+        axs[0].imshow(hist_xy.T, origin='lower', extent=[x_min, x_max, y_min, y_max], aspect='auto', cmap=cmap, alpha=base_alpha)
+        axs[0].set_title('XY Projection')
+        axs[0].set_xlabel('X')
+        axs[0].set_ylabel('Y')
+
+        # Overlay model structure on XY
+        if model_structure is not None:
+            axs[0].scatter(model_structure[:, 0], model_structure[:, 1], c='white', edgecolor='white',
+                           s=30, label='Model Structure')
+            axs[0].legend()
+
+        # XZ Projection
+        axs[1].imshow(hist_xz.T, origin='lower', extent=[x_min, x_max, z_min, z_max], aspect='auto', cmap=cmap, alpha=base_alpha)
+        axs[1].set_title('XZ Projection')
+        axs[1].set_xlabel('X')
+        axs[1].set_ylabel('Z')
+
+        # Overlay model structure on XZ
+        if model_structure is not None:
+            axs[1].scatter(model_structure[:, 0], model_structure[:, 2], c='white', edgecolor='white',
+                           s=30, label='Model Structure')
+            axs[1].legend()
+
+        plt.tight_layout()
+        if save_to:
+            plt.savefig(save_to, dpi=600)
+            print(f"Plot saved to: {save_to}")
+        else:
+            plt.show()
+
+        plt.close(fig)
+
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def plot_multiple_projections(data_list, grid_size=0.01, sigma=1, cmap='hot', save_to=None):
     """
     Plot multiple sets of XY and XZ histogram projections, stacking the plots in a grid.
 
@@ -142,6 +247,9 @@ def plot_multiple_projections(data_list, grid_size=0.01, cmap='hot', save_to=Non
             hist_xy = np.sum(hist, axis=2)  # Projection onto XY plane
             hist_xz = np.sum(hist, axis=1)  # Projection onto XZ plane
 
+            hist_xy = gaussian_filter(hist_xy, sigma=sigma)  # Adjust sigma for smoothness
+            hist_xz = gaussian_filter(hist_xz, sigma=sigma)
+
             # Plot the XY projection
             axs[i][0].imshow(hist_xy.T, origin='lower', extent=[x_min, x_max, y_min, y_max], aspect='auto', cmap=cmap)
             axs[i][0].set_title('XY Projection')
@@ -173,6 +281,263 @@ def plot_multiple_projections(data_list, grid_size=0.01, cmap='hot', save_to=Non
         print(f"ValueError: {e}")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
+
+def plot_multiple_projections_grid(data_list, grid_size=0.01, sigma=1, cmap='hot', cols=2, save_to=None):
+    """
+    Plot multiple sets of XY and XZ histogram projections in a grid with 4 columns.
+
+    Parameters:
+    - data_list (list): A list of datasets (can be file paths, DataFrames, or NumPy arrays).
+    - grid_size (float): Size of the grid cells for the histogram bins.
+    - sigma (float): Standard deviation for Gaussian smoothing.
+    - cmap (str): Colormap for the projections.
+    - save_to (str | None): File path to save the plot. If None, the plot is shown instead.
+    """
+    try:
+        num_datasets = len(data_list)
+        if num_datasets == 0:
+            raise ValueError("The data list must contain at least one dataset.")
+
+        # Define grid layout
+        rows = (num_datasets + cols - 1) // cols  # Calculate required rows
+
+        fig, axs = plt.subplots(rows, cols * 2, figsize=(6 * cols, 4 * rows))  # Adjust figure size
+
+        # Flatten axs in case it's 2D, to make indexing easier
+        axs = axs.reshape(-1, 2)
+
+        for i, data in enumerate(data_list):
+            # Load the data
+            if isinstance(data, str):
+                data = pd.read_csv(data)
+            elif isinstance(data, pd.DataFrame):
+                pass
+            elif isinstance(data, np.ndarray):
+                if data.shape[1] != 3:
+                    raise ValueError("Each input array must have 3 columns representing x, y, and z coordinates.")
+                data = pd.DataFrame(data, columns=['x', 'y', 'z'])
+            else:
+                raise ValueError("Each dataset must be a file path, Pandas DataFrame, or NumPy array.")
+
+            # Ensure DataFrame has required columns
+            if not all(col in data.columns for col in ['x', 'y', 'z']):
+                raise ValueError("Each DataFrame must contain the columns: 'x', 'y', and 'z'")
+
+            # Convert DataFrame to NumPy array
+            point_cloud = data[['x', 'y', 'z']].to_numpy()
+
+            # Determine histogram bins
+            x_min, x_max = np.min(point_cloud[:, 0]), np.max(point_cloud[:, 0])
+            y_min, y_max = np.min(point_cloud[:, 1]), np.max(point_cloud[:, 1])
+            z_min, z_max = np.min(point_cloud[:, 2]), np.max(point_cloud[:, 2])
+
+            x_bins = int((x_max - x_min) / grid_size) + 1
+            y_bins = int((y_max - y_min) / grid_size) + 1
+            z_bins = int((z_max - z_min) / grid_size) + 1
+
+            # Compute the 3D histogram
+            hist, edges = np.histogramdd(point_cloud, bins=[x_bins, y_bins, z_bins])
+
+            # Project to XY and XZ planes
+            hist_xy = np.sum(hist, axis=2)
+            hist_xz = np.sum(hist, axis=1)
+
+            # Apply Gaussian smoothing
+            hist_xy = gaussian_filter(hist_xy, sigma=sigma)
+            hist_xz = gaussian_filter(hist_xz, sigma=sigma)
+
+            # Get subplot indices
+            ax_xy, ax_xz = axs[i]
+
+            # Plot XY projection
+            ax_xy.imshow(hist_xy.T, origin='lower', extent=[x_min, x_max, y_min, y_max], aspect='auto', cmap=cmap)
+            ax_xy.set_xticks([])  # Remove ticks
+            ax_xy.set_yticks([])
+            ax_xy.set_title('XY Projection')
+
+            # Plot XZ projection
+            ax_xz.imshow(hist_xz.T, origin='lower', extent=[x_min, x_max, z_min, z_max], aspect='auto', cmap=cmap)
+            ax_xz.set_xticks([])
+            ax_xz.set_yticks([])
+            ax_xz.set_title('XZ Projection')
+
+        # Remove any unused subplots (if number of datasets isn't a multiple of 4)
+        for j in range(i + 1, rows * cols):
+            axs[j][0].axis("off")
+            axs[j][1].axis("off")
+
+        plt.tight_layout()
+
+        # Save or show the grid of plots
+        if save_to:
+            plt.savefig(save_to, dpi=600)
+            print(f"Multi-dataset plots saved to: {save_to}")
+            plt.show()
+        else:
+            plt.show()
+
+        plt.close(fig)  # Free memory
+
+    except FileNotFoundError as e:
+        print(f"FileNotFoundError: {e}")
+    except ValueError as e:
+        print(f"ValueError: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+def plot_multiple_projections_black(data_list, grid_size=0.01, sigma=1, cmap='hot', save_to=None):
+    """
+    Plot multiple sets of XY and XZ histogram projections with a 3D scatter plot for each sample,
+    all on a black background.
+
+    Parameters:
+    - data_list (list): A list of datasets (can be file paths, DataFrames, or NumPy arrays).
+    - grid_size (float): Size of the grid cells for the histogram bins.
+    - sigma (float): Standard deviation for Gaussian smoothing.
+    - cmap (str): Colormap for the projections.
+    - save_to (str | None): File path to save the plot. If None, the plot is shown instead.
+    """
+    try:
+        num_datasets = len(data_list)
+        if num_datasets == 0:
+            raise ValueError("The data list must contain at least one dataset.")
+
+        cols = 3  # Columns: [XY Projection | XZ Projection | 3D Scatter]
+        rows = len(data_list)
+
+        fig, axs = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows), facecolor='black')
+        # Adjust spacing: Small space between XY | XZ | 3D, larger space between samples
+        plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, wspace=0.5, hspace=0.8)
+
+
+        for i, data in enumerate(data_list):
+            row_idx = i # Two samples per row
+            col_idx = 0  # First column for XY
+
+            # Load data
+            if isinstance(data, str):
+                data = pd.read_csv(data)
+            elif isinstance(data, pd.DataFrame):
+                pass
+            elif isinstance(data, np.ndarray):
+                if data.shape[1] != 3:
+                    raise ValueError("Each input array must have 3 columns representing x, y, and z coordinates.")
+                data = pd.DataFrame(data, columns=['x', 'y', 'z'])
+            else:
+                raise ValueError("Each dataset must be a file path, Pandas DataFrame, or NumPy array.")
+
+            # Ensure required columns exist
+            if not all(col in data.columns for col in ['x', 'y', 'z']):
+                raise ValueError("Each DataFrame must contain the columns: 'x', 'y', and 'z'")
+
+            # Convert DataFrame to NumPy array
+            point_cloud = data[['x', 'y', 'z']].to_numpy()
+
+            # Determine histogram bins
+            x_min, x_max = np.min(point_cloud[:, 0]), np.max(point_cloud[:, 0])
+            y_min, y_max = np.min(point_cloud[:, 1]), np.max(point_cloud[:, 1])
+            z_min, z_max = np.min(point_cloud[:, 2]), np.max(point_cloud[:, 2])
+
+            x_bins = int((x_max - x_min) / grid_size) + 1
+            y_bins = int((y_max - y_min) / grid_size) + 1
+            z_bins = int((z_max - z_min) / grid_size) + 1
+
+            # Compute the 3D histogram
+            hist, edges = np.histogramdd(point_cloud, bins=[x_bins, y_bins, z_bins])
+
+            # Project to XY and XZ planes
+            hist_xy = np.sum(hist, axis=2)
+            hist_xz = np.sum(hist, axis=1)
+
+            # Apply Gaussian smoothing
+            hist_xy = gaussian_filter(hist_xy, sigma=sigma)
+            hist_xz = gaussian_filter(hist_xz, sigma=sigma)
+            # Get the two subplot axes for this dataset
+            ax_xy = axs[row_idx, col_idx]  # XY Projection
+            ax_xz = axs[row_idx, col_idx + 1]  # XZ Projection
+            ax_3d = fig.add_subplot(rows, cols, (row_idx * cols) + col_idx + 3, projection='3d', facecolor='black')
+
+            # Plot XY projection
+            ax_xy.imshow(hist_xy.T, origin='lower', extent=[x_min, x_max, y_min, y_max], cmap=cmap, aspect='auto')
+            ax_xy.set_xticks([])
+            ax_xy.set_yticks([])
+            ax_xy.set_title(f'XY Projection', fontsize=12, color='white')
+            ax_xy.set_facecolor('black')
+
+            # Plot XZ projection
+            ax_xz.imshow(hist_xz.T, origin='lower', extent=[x_min, x_max, z_min, z_max], cmap=cmap, aspect='auto')
+            ax_xz.set_xticks([])
+            ax_xz.set_yticks([])
+            ax_xz.set_title(f'XZ Projection', fontsize=12, color='white')
+            ax_xz.set_facecolor('black')
+
+            for ax in [ax_xy, ax_xz]:
+                ax.spines['top'].set_color('white')
+                ax.spines['bottom'].set_color('white')
+                ax.spines['left'].set_color('white')
+                ax.spines['right'].set_color('white')
+                ax.spines['top'].set_linewidth(1)  # Adjust thickness
+                ax.spines['bottom'].set_linewidth(1)
+                ax.spines['left'].set_linewidth(1)
+                ax.spines['right'].set_linewidth(1)
+
+            # ✅ Center X, Y inside the XY projection
+            ax_xy.text(0.5, 0.02, "X", transform=ax_xy.transAxes, fontsize=12, color='white', ha='center', va='bottom')
+            ax_xy.text(0.02, 0.5, "Y", transform=ax_xy.transAxes, fontsize=12, color='white', ha='left', va='center',
+                       rotation=90)
+
+            # ✅ Center X, Z inside the XZ projection
+            ax_xz.text(0.5, 0.02, "X", transform=ax_xz.transAxes, fontsize=12, color='white', ha='center', va='bottom')
+            ax_xz.text(0.02, 0.5, "Z", transform=ax_xz.transAxes, fontsize=12, color='white', ha='left', va='center',
+                       rotation=90)
+
+            # Plot 3D Scatter (on black)
+            ax_3d.scatter(point_cloud[:, 0], point_cloud[:, 1], point_cloud[:, 2],
+                          color='skyblue', s=12, alpha=0.6)
+            ax_3d.set_title(f'3D Scatter', fontsize=14, color='white')
+            # Remove ticks & grid from 3D plot
+            ax_3d.set_xticks([])
+            ax_3d.set_yticks([])
+            ax_3d.set_zticks([])
+            ax_3d.set_xlabel("X", fontsize=14, color='white')
+            ax_3d.set_ylabel("Y", fontsize=14, color='white')
+            ax_3d.set_zlabel("Z", fontsize=14, color='white')
+
+            # Adjust position to move them inside the grid
+            ax_3d.xaxis.label.set_position((0.5, -0.3))  # Move X label inside
+            ax_3d.yaxis.label.set_position((-0.1, 0.5))  # Move Y label inside
+            ax_3d.zaxis.label.set_position((0.5, -0.3))  # Move Z label inside
+
+            ax_3d.grid(False)
+            ax_3d.set_facecolor('black')
+            #ax_3d.set_frame_on(False)
+            ax_3d.patch.set_facecolor('black')
+            ax_3d.xaxis.set_pane_color((0, 0, 0, 1))
+            ax_3d.yaxis.set_pane_color((0, 0, 0, 1))
+            ax_3d.zaxis.set_pane_color((0, 0, 0, 1))
+            ax_3d.xaxis.pane.set_edgecolor("white")
+            ax_3d.yaxis.pane.set_edgecolor("white")
+            ax_3d.zaxis.pane.set_edgecolor("white")
+
+        plt.tight_layout()
+
+        # Save or show the figure
+        if save_to:
+            plt.savefig(save_to, dpi=600, facecolor='black')
+            print(f"Multi-dataset plots saved to: {save_to}")
+            plt.show()
+        else:
+            plt.show()
+
+        plt.close(fig)  # Free memory
+
+    except FileNotFoundError as e:
+        print(f"FileNotFoundError: {e}")
+    except ValueError as e:
+        print(f"ValueError: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
 
 def get_clusters(df, plot=True):
     coordinates = df[['x', 'y', 'z']].values  # Extract coordinates
@@ -355,7 +720,7 @@ def statistical_test(df1, df2):
     return ks_stat, ks_pval
 
 # Compute estimated localization precision from Maxwell-Boltzmann fit (?)
-sigma_fit = np.sqrt(np.mean(distrib["radial_distance"]**2) / 3)  # 3D localization precision
+#sigma_fit = np.sqrt(np.mean(distrib["radial_distance"]**2) / 3)  # 3D localization precision
 
 
 # Define the Thompson-Mortensen precision formula
@@ -392,7 +757,7 @@ for file in csv_files:
 
 # Compute the overall average ? across all samples
 average_sigma = np.mean(sigma_values)
-std_sigma = np.std(sigma_values) 
+#std_sigma = np.std(sigma_values) 
 
 # Extract different individual stats from big stats dict
 

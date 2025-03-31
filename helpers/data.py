@@ -35,18 +35,27 @@ def pad_tensor(current_shape, target_shape):
     return padded_tensor
 
 
-def get_highest_shape(root_folder, classes):
-    highest = 0
+def get_highest_shape(root_folder, classes, subfolders=('iso', 'aniso'), suffix='.csv'):
     if 'all' in classes:
-        cls = [elem for elem in os.listdir(root_folder) if os.path.isdir(os.path.join(root_folder, elem))]
+        classes_to_use = [elem for elem in os.listdir(root_folder) if
+                               os.path.isdir(os.path.join(root_folder, elem))]
     else:
-        cls = classes
-    for cl in cls:
-        folder = os.path.join(root_folder, cl)
-        files = os.listdir(folder)
-        for file in files:
-            if len(pd.read_csv(os.path.join(folder, file))) > highest:
-                highest = len(pd.read_csv(os.path.join(folder, file)))
+        classes_to_use = classes
+    highest = 0
+    for cls in classes_to_use:
+        for subfolder in subfolders:
+            folder = os.path.join(root_folder, cls, subfolder)
+            if not os.path.isdir(folder):
+                continue
+            for file in os.listdir(folder):
+                full_path = os.path.join(folder, file)
+                if os.path.isfile(full_path) and file.endswith(suffix):
+                    try:
+                        df = pd.read_csv(full_path)
+                        if len(df) > highest:
+                            highest = len(df)
+                    except Exception as e:
+                        print(f"Failed to read {full_path}: {e}")
     return highest
 
 

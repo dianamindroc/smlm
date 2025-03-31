@@ -16,10 +16,13 @@ data/
 models/
 
 figures/
+completion3d/
 
 simulation/new_sim.py
 simulation/sim_smlm_data.py
 simulation/simulate_smlm.py
+
+model_architectures/pcn_flexible.py
 
 scripts/test.py
 scripts/*.def
@@ -28,6 +31,7 @@ scripts/*.yaml
 scripts/quick_read.py
 scripts/scraps.py
 scripts/test_gpu.py
+scripts/get_wandb_info.py
 
 dataset/SMLMSimulatorStats.py
 

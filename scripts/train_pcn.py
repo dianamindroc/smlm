@@ -20,9 +20,11 @@ matplotlib.use('Agg')
 from helpers.data import get_highest_shape
 from helpers.logging import create_log_folder
 from model_architectures import pcn, losses
+from model_architectures.pcn_flexible import PCN_NoFolding
 from model_architectures.transforms import ToTensor, Padding
 from model_architectures.utils import cfg_from_yaml_file, set_seed
 from dataset.SMLMDataset import Dataset
+from dataset.Dataset import PairedAnisoIsoDataset
 from dataset.ShapeNet import ShapeNet
 from dataset.SMLMSimulator import DNAOrigamiSimulator
 import warnings
@@ -77,7 +79,7 @@ def train(config, exp_name=None, fixed_alpha=None):
     root_folder = config.dataset.root_folder
     classes = config.dataset.classes
     suffix = config.dataset.suffix
-    highest_shape = get_highest_shape(root_folder, classes)
+    highest_shape = get_highest_shape(root_folder, classes, subfolders=['iso', 'aniso'])
     pc_transforms = transforms.Compose(
         [Padding(highest_shape), ToTensor()])
 
@@ -101,18 +103,26 @@ def train(config, exp_name=None, fixed_alpha=None):
         full_dataset = DNAOrigamiSimulator(1000, 'box', selected_dye_properties, augment=True, remove_corners=True,
                                            transform=pc_transforms)
     else:
-        full_dataset = Dataset(root_folder=root_folder,
-                               suffix=suffix,
-                               transform=pc_transforms,
-                               classes_to_use=classes,
-                               data_augmentation=False,
-                               remove_part_prob=train_config['remove_part_prob'],
-                               remove_corners=train_config['remove_corners'],
-                               remove_outliers=train_config['remove_outliers'],
-                               anisotropy=train_config['anisotropy'],
-                               anisotropy_axis=train_config['anisotropy_axis'],
-                               anisotropy_factor=train_config['anisotropy_factor'],
-                               number_corners_to_remove=train_config['num_corners_remove'])
+        # full_dataset = Dataset(root_folder=root_folder,
+        #                        suffix=suffix,
+        #                        transform=pc_transforms,
+        #                        classes_to_use=classes,
+        #                        data_augmentation=False,
+        #                        remove_part_prob=train_config['remove_part_prob'],
+        #                        remove_corners=train_config['remove_corners'],
+        #                        remove_outliers=train_config['remove_outliers'],
+        #                        anisotropy=train_config['anisotropy'],
+        #                        anisotropy_axis=train_config['anisotropy_axis'],
+        #                        anisotropy_factor=train_config['anisotropy_factor'],
+        #                        number_corners_to_remove=train_config['num_corners_remove'])
+        full_dataset = PairedAnisoIsoDataset(root_folder=root_folder,
+                                             suffix=suffix,
+                                             transform=pc_transforms,
+                                             classes_to_use=classes,
+                                             remove_corners=train_config['remove_corners'],
+                                             remove_outliers=train_config['remove_outliers'],
+                                             number_corners_to_remove=train_config['num_corners_remove'],
+                                             remove_part_prob=train_config['remove_part_prob'])
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
@@ -125,23 +135,67 @@ def train(config, exp_name=None, fixed_alpha=None):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print('Device:', device)
 
+    if train_config['num_dense'] == 'highest':
+        num_dense = highest_shape
+    else:
+        num_dense = train_config['num_dense']
     # model
-    model = pcn.PCN(num_dense=train_config['num_dense'], latent_dim=train_config['latent_dim'], grid_size=train_config['grid_size'],
+    model = pcn.PCN(num_dense=num_dense, latent_dim=train_config['latent_dim'], grid_size=train_config['grid_size'],
                     classifier=train_config['classifier'],
                     num_classes=config.dataset.number_classes, channels=train_config['channels']).to(device)
+    #model = PCN_NoFolding(num_dense=highest_shape, latent_dim=train_config['latent_dim'], classifier=train_config['classifier'], num_classes=config.dataset.number_classes, channels=train_config['channels']).to(device)
     # optimizer_recon
     #optimizer_recon = optim.Adam(model.parameters(), lr=train_config['lr'], betas=(0.9, 0.999))
     #lr_schedual = optim.lr_scheduler.StepLR(optimizer_recon, step_size=50, gamma=0.7)
-    params_recon = list(model.first_conv.parameters()) + list(model.second_conv.parameters()) + \
-                   list(model.mlp.parameters()) + list(model.final_conv.parameters())
-    optimizer_recon = optim.Adam(params_recon, lr=train_config['lr'],
-                                 betas=(train_config['momentum'], train_config['momentum2']),
-                                 weight_decay=train_config['gamma'], )
-    if train_config['classifier']:
-        params_class = list(model.mlp1.parameters()) + list(model.bn1_mlp.parameters()) + \
-                       list(model.mlp2.parameters()) + list(model.bn2_mlp.parameters()) + \
-                       list(model.mlp3.parameters()) + list(model.sigmoid_mlp.parameters())
-        optimizer_mlp = optim.Adam(params_class, lr=0.0001, betas=(0.9, 0.999), weight_decay=1e-5)
+    # -------- Reconstruction Parameters --------
+    params_recon = []
+
+    # Add encoder blocks
+    if hasattr(model, 'first_conv'):
+        params_recon += list(model.first_conv.parameters())
+    if hasattr(model, 'second_conv'):
+        params_recon += list(model.second_conv.parameters())
+    if hasattr(model, 'attention'):
+        params_recon += list(model.attention.parameters())
+
+    # Decoder (original folding version has mlp + final_conv, new version has coarse_decoder + fine_decoder)
+    if hasattr(model, 'mlp'):
+        params_recon += list(model.mlp.parameters())
+    if hasattr(model, 'final_conv'):
+        params_recon += list(model.final_conv.parameters())
+    if hasattr(model, 'coarse_decoder'):
+        params_recon += list(model.coarse_decoder.parameters())
+    if hasattr(model, 'fine_decoder'):
+        params_recon += list(model.fine_decoder.parameters())
+
+    optimizer_recon = optim.Adam(
+        params_recon,
+        lr=train_config['lr'],
+        betas=(train_config['momentum'], train_config['momentum2']),
+        weight_decay=train_config['gamma'],
+    )
+
+    # -------- Classification Parameters --------
+    optimizer_mlp = None
+    if train_config.get('classifier', False):
+
+        params_class = []
+
+        # Old-style classifier (mlp1, mlp2, etc.)
+        for name in ['mlp1', 'mlp2', 'mlp3', 'bn1_mlp', 'bn2_mlp', 'sigmoid_mlp']:
+            if hasattr(model, name):
+                params_class += list(getattr(model, name).parameters())
+
+        # New-style classifier (single classifier_mlp block)
+        if hasattr(model, 'classifier_mlp'):
+            params_class += list(model.classifier_mlp.parameters())
+
+        optimizer_mlp = optim.Adam(
+            params_class,
+            lr=0.0001,
+            betas=(0.9, 0.999),
+            weight_decay=1e-5
+        )
 
     if train_config['scheduler_type'] != 'None':
         if train_config['scheduler_type'] == 'StepLR':
@@ -181,6 +235,7 @@ def train(config, exp_name=None, fixed_alpha=None):
 
     # training
     best_cd_l1 = 1e8
+    best_class_loss = 1e8
     best_epoch_l1 = -1
     train_step, val_step = 0, 0
     alpha = config.train.initial_alpha
@@ -229,10 +284,10 @@ def train(config, exp_name=None, fixed_alpha=None):
             # forward propagation
             if train_config['autoencoder']:
                 #coarse_pred, dense_pred, _, out_classifier = model(c_per)
-                coarse_pred, dense_pred, _, out_classifier = model(c_anisotropic)
+                coarse_pred, dense_pred, _, out_classifier, attn_weights = model(c_anisotropic)
             else:
                 #coarse_pred, dense_pred, _, out_classifier = model(p)
-                coarse_pred, dense_pred, _, out_classifier = model(p)
+                coarse_pred, dense_pred, _, out_classifier, attn_weights = model(p)
 
             # try out rotations information
             # rotated_reconstructions = []
@@ -336,7 +391,9 @@ def train(config, exp_name=None, fixed_alpha=None):
                 p = data['partial_pc']
                 c_anisotropic = data['pc_anisotropic']
                 #rot = data['rotation']
-                filenames = [os.path.basename(path) for path in data['path']]
+                #filenames = [os.path.basename(path) for path in data['path']]
+                filenames_iso = [os.path.basename(path) for path in data['iso_path']]
+                filenames_aniso = [os.path.basename(path) for path in data['aniso_path']]
                 if train_config['channels'] == 3:
                     c = c[:, :, :3]
                     p = p[:, :, :3]
@@ -344,20 +401,18 @@ def train(config, exp_name=None, fixed_alpha=None):
                 mask_complete = data['pc_mask']
                 label = data['label']
                 corner_label = data['corner_label']
-                # filename = os.path.basename(data['path'])
+
                 if train_config['autoencoder']:
-                    c_per = c.permute(0, 2, 1)
-                    c_per = c_per.to(device)
                     c_anisotropic = c_anisotropic.permute(0, 2, 1)
                     c_anisotropic = c_anisotropic.to(device)
                 p = p.permute(0, 2, 1)
                 p, c, label, corner_label = p.to(device), c.to(device), label.to(device), corner_label.to(device)
                 if train_config['autoencoder']:
                     #coarse_pred, dense_pred, features, out_classifier = model(c_per)
-                    coarse_pred, dense_pred, features, out_classifier = model(c_anisotropic)
+                    coarse_pred, dense_pred, features, out_classifier, attn_weights = model(c_anisotropic)
                 else:
                     #coarse_pred, dense_pred, features, out_classifier = model(p)
-                    coarse_pred, dense_pred, features, out_classifier = model(p)
+                    coarse_pred, dense_pred, features, out_classifier, attn_weights = model(p)
 
                 # try out rotations information
                 #rotated_reconstructions = []
@@ -381,11 +436,13 @@ def train(config, exp_name=None, fixed_alpha=None):
                 corner_name.append(data['corner_label_name'])
                 labels_names.append(data['label_name'])
                 feature_space.extend(features.detach().cpu().numpy())
+
                 cd_loss = losses.l1_cd(dense_pred, c).item()
                 total_cd_l1 += cd_loss
                 mlp_loss = losses.mlp_loss_function(label, out_classifier)
+
                 if i == rand_iter:
-                    j = random.randint(0, len(filenames) - 1)
+                    j = random.randint(0, len(filenames_iso) - 1)
                     if train_config['autoencoder']:
                         input_pc = c_anisotropic[j].detach().cpu().numpy()
                     else:
@@ -395,14 +452,15 @@ def train(config, exp_name=None, fixed_alpha=None):
                     #rotated_output = rotated_reconstructions[j].detach().cpu().numpy()
                     gt = c[j].detach().cpu().numpy()
                     coarse = coarse_pred[j].detach().cpu().numpy()
-
-                    sample_filename = filenames[j]
+                    attn_matrix = attn_weights[j].detach().cpu().numpy()
+                    sample_filename = filenames_iso[j].replace('.csv', '')
 
                     # Export PLY files
                     export_ply(os.path.join(log_dir, f'{epoch:03d}_input_{sample_filename}.ply'), input_pc)
                     export_ply(os.path.join(log_dir, f'{epoch:03d}_output_{sample_filename}.ply'), output_pc)
                     export_ply(os.path.join(log_dir, f'{epoch:03d}_gt_{sample_filename}.ply'), gt)
                     export_ply(os.path.join(log_dir, f'{epoch:03d}_coarse_{sample_filename}.ply'), coarse)
+                    np.save(os.path.join(log_dir,f'{epoch:03d}_attn_matrix.npy'), attn_matrix)
                     #export_ply(os.path.join(log_dir, f'{epoch:03d}_rotatedoutput_{sample_filename}.ply'), rotated_output)
 
                     # Log to wandb
@@ -471,6 +529,10 @@ def train(config, exp_name=None, fixed_alpha=None):
             early_stop_counter = 0
         else:
             early_stop_counter += 1
+
+        if mlp_loss < best_class_loss:
+            best_class_loss = mlp_loss
+            torch.save(model.state_dict(), os.path.join(log_dir, 'best_class_loss.pth'))
 
         if early_stop_counter >= early_stop_patience:
             print(f'Early stopping triggered. No improvement for {early_stop_patience} epochs.')

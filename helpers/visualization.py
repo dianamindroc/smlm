@@ -539,18 +539,18 @@ def plot_centers_mass(gt, output, cluster_size):
             mid_y = (centers_of_mass_gt[dim2].iloc[i] + centers_of_mass_output[dim2].iloc[i]) / 2
 
             # Add distance label
-            ax.annotate(f'{distances[i]:.2f}', (mid_x, mid_y), xytext=(3, 3),
+            ax.annotate(f"{distances[i]:.2f}", (mid_x, mid_y), xytext=(3, 3),
                         textcoords='offset points', fontsize=8, alpha=0.7)
 
         # Set labels and title
         ax.set_xlabel(dim1.upper())
         ax.set_ylabel(dim2.upper())
-        ax.set_title(f'{dim1.upper()}{dim2.upper()} View')
+        ax.set_title(f"{dim1.upper()}{dim2.upper()} View")
         ax.legend()
 
     # Add overall title with average distance
     avg_distance = np.mean(distances)
-    fig.suptitle(f'Centers of Mass: Ground Truth vs Output\nAverage Distance: {avg_distance:.2f}', fontsize=16)
+    fig.suptitle(f"Centers of Mass: Ground Truth vs Output\nAverage Distance: {avg_distance:.2f}", fontsize=16)
 
     plt.tight_layout()
     plt.show()
@@ -1235,7 +1235,7 @@ def hist_projections_with_model(point_cloud, model_structure, grid_size=0.01, cm
     plt.show()
 
 
-def hist_projections_with_model_and_centroid(point_cloud, model_structure, cluster_size=5, min_samples=20, grid_size=0.01, cmap='hot', title=None, save=False, background='black'):
+def hist_projections_with_model_and_centroid(point_cloud, model_structure, cluster_size=5, min_samples=20, grid_size=0.01, sigma=1, cmap='hot', title=None, save=False, background='black'):
     """
     Projects a 3D point cloud and model structure onto XY and XZ planes, plots the intensity images
     with consistent scaling and fixed bounding box size, and includes cluster centroids.
@@ -1250,6 +1250,7 @@ def hist_projections_with_model_and_centroid(point_cloud, model_structure, clust
     :param background: str, default 'black'. 'black' or 'white' background color for the plot.
     """
     import hdbscan
+    from scipy.ndimage import gaussian_filter
 
     # Set colors based on background choice
     if background == 'black':
@@ -1301,6 +1302,9 @@ def hist_projections_with_model_and_centroid(point_cloud, model_structure, clust
     # Calculate projections for point cloud
     hist_xy = np.sum(hist, axis=2)
     hist_xz = np.sum(hist, axis=1)
+
+    hist_xy = gaussian_filter(hist_xy, sigma=sigma)  # Adjust sigma for smoothness
+    hist_xz = gaussian_filter(hist_xz, sigma=sigma)
 
     # Find the maximum value for consistent scaling
     vmax = max(np.max(hist_xy), np.max(hist_xz))

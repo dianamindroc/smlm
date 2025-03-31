@@ -1,14 +1,14 @@
 dataset:
-  root_folder: '/home/dim26fa/data/sim_17022025/samples'
+  root_folder: '/home/dim26fa/data/sim_cube_tetra'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
   remove_part_prob: 0.6
   dataset_type: 'tetra'
-  remove_corners: True
+  remove_corners: False
   number_corners_remove: [0,1,2]
-  remove_outliers: True
-  anisotropy: True
+  remove_outliers: False
+  anisotropy: False
   anisotropy_factor: 0.6
   anisotropy_axis: 'z'
   initial_alpha: 1.0
@@ -45,7 +45,7 @@ train:
   lambda_reg: 0.01
   alpha_density: 0.5
   beta_sparsity: 0.02
-  num_dense: 2048
+  num_dense: 1470
   latent_dim: 1024
   grid_size: 2
 pcn_config:

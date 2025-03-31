@@ -257,8 +257,12 @@ def read_by_sample(path, sample):
     gt = next((read_pc(s) for s in samples if 'gt' in s), None)
     inputt = next((read_pc(s) for s in samples if 'input' in s), None)
     output = next((read_pc(s) for s in samples if 'output' in s), None)
-    return (gt, inputt, output, pd.DataFrame(gt, columns=['x', 'y', 'z']), pd.DataFrame(inputt, columns=['x', 'y', 'z']),
-            pd.DataFrame(output, columns=['x', 'y', 'z']))
+    return {'gt':gt,
+            'input':inputt,
+            'output':output,
+            'gtdf': pd.DataFrame(gt, columns=['x', 'y', 'z']),
+            'inputdf': pd.DataFrame(inputt, columns=['x', 'y', 'z']),
+            'outputdf':pd.DataFrame(output, columns=['x', 'y', 'z'])}
 
 
 def read_pts_file(file_path):

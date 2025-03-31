@@ -1,14 +1,14 @@
 dataset:
 
-  root_folder: '/home/dim26fa/data/test_dna_tetra_heydarian/'
+  root_folder: '/home/dim26fa/data/test_cube_tetra/'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
   remove_part_prob: 0.4
   dataset_type: 'tetra'
-  remove_corners: True
+  remove_corners: False
   number_corners_remove: [0,1,2]
-  remove_outliers: True
+  remove_outliers: False
   anisotropy: False
   anisotropy_factor: 1.5
   anisotropy_axis: 'z'
@@ -16,6 +16,7 @@ dataset:
 model: 'pcn'
 test:
   lr: 0.001
+  channels: 3
   batch_size: 64
   num_workers: 6
   momentum: 0.9
@@ -33,6 +34,9 @@ test:
   ignore_zeros: False
   augmentation: True
   save: True
+  grid_size: 2
+  num_dense: 'highest'
+  latent_dim: 1024
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240529_122034/best_l1_cd.pth'
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240725_125117/best_l1_cd.pth'
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240730_105324/best_l1_cd.pth'
@@ -40,5 +44,7 @@ test:
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240812_124453/best_l1_cd.pth'
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240814_165920/best_l1_cd.pth'
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20241009_225619/best_l1_cd.pth'
-  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20241205_012746/best_l1_cd.pth'
+  #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20241205_012746/best_l1_cd.pth'
   # ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240819_100525/best_l1_cd.pth'
+  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20250327_222737/best_l1_cd.pth'
+  ckpt_path_class: '/home/dim26fa/coding/training/logs_pcn_20250327_222737/best_class_loss.pth'

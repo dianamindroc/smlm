@@ -26,8 +26,6 @@ class ToTensor(object):
         else:
             sample['label'] = torch.tensor([0], dtype=torch.float)
 
-        # Non-numeric data like 'path' are left as is
-
         return sample
 
 class Padding(object):
@@ -62,9 +60,10 @@ class Padding(object):
             padded_point_cloud = point_cloud
 
         # Create a mask indicating original points with ones and duplicated points with zeros
-        mask = np.ones(self.highest_shape)
+        mask = np.zeros(self.highest_shape)
         mask[:point_cloud.shape[0]] = 1  # Original points
         return padded_point_cloud, mask
+
 
     def __call__(self, sample):
         """
@@ -83,3 +82,5 @@ class Padding(object):
         sample['pc_anisotropic_mask'] = pc_anisotropic_mask
 
         return sample
+
+

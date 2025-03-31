@@ -16,8 +16,8 @@ class EnhancedSelfAttention(nn.Module):
 
     def forward(self, x):
         x = x.permute(2, 0, 1)  # (N, B, C)
-        attn_output, _ = self.mha(x, x, x)
+        attn_output, attn_weights = self.mha(x, x, x)
         x = self.norm1(x + attn_output)
         ffn_output = self.ffn(x)
         x = self.norm2(x + ffn_output)
-        return x.permute(1, 2, 0)  # (B, C, N)
+        return x.permute(1, 2, 0), attn_weights  # (B, C, N)

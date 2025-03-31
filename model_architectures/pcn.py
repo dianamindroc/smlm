@@ -6,7 +6,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from model_architectures.attention import EnhancedSelfAttention
-from model_architectures.adaptive_folding import AdaptiveFolding, AdaptiveFolding2
+from model_architectures.adaptive_folding import AdaptiveFolding
 
 
 class PCN(nn.Module):
@@ -31,9 +31,20 @@ class PCN(nn.Module):
         self.num_classes = num_classes
         self.channels = channels
 
-        assert self.num_dense % self.grid_size ** 2 == 0
+        #assert self.num_dense % self.grid_size ** 2 == 0
+        #self.num_coarse = self.num_dense // (self.grid_size ** 2)
 
-        self.num_coarse = self.num_dense // (self.grid_size ** 2)
+        grid_patch = self.grid_size ** 2
+
+        # Adjust num_dense to be divisible by grid_size^2
+        if self.num_dense % grid_patch != 0:
+            original_num_dense = self.num_dense
+            self.num_dense = ((self.num_dense // grid_patch) + 1) * grid_patch
+            print(
+                f"[INFO] Adjusted num_dense from {original_num_dense} to {self.num_dense} to match folding grid size ({self.grid_size}x{self.grid_size})")
+
+        self.num_coarse = self.num_dense // grid_patch
+
 
         self.first_conv = nn.Sequential(
             nn.Conv1d(self.channels, 128, 1),
@@ -102,6 +113,7 @@ class PCN(nn.Module):
         #grid = torch.stack([grid_x, grid_y], dim=-1).reshape(1, -1, 2)
         #self.folding_seed = grid.transpose(1, 2).cuda()
 
+        self.output_scale = nn.Parameter(torch.tensor([1.2]), requires_grad=True)
 
         if self.classifier:
             #self.classifiernet = ImprovedClassifier(self.latent_dim, self.num_classes)
@@ -138,14 +150,14 @@ class PCN(nn.Module):
 
         # Skip connection for encoder
         #encoder_skip = 0.1 * feature
-        feature = self.dropout(feature)
+
         # try out attention
-        attention_output = self.attention(feature)
-
+        attention_output, attn_weights = self.attention(feature)
+        feature = self.dropout(attention_output)
         # Skip connection for attention
-        attention_output = attention_output #+ encoder_skip
+        #attention_output = attention_output #+ encoder_skip
 
-        feature_global_return = torch.max(attention_output, dim=2, keepdim=False)[0]  # (B, 1024)
+        feature_global_return = torch.max(feature, dim=2, keepdim=False)[0]  # (B, 1024)
 
         # classifier
         if self.classifier:
@@ -174,9 +186,9 @@ class PCN(nn.Module):
         feat = torch.cat([feature_global, seed, folded_points], dim=1)
 
         # Skip connection for final_conv
-        # skip_out = self.skip_conv(feat)
+        #skip_out = self.skip_conv(feat)
         if self.channels == 3:
-            fine = self.final_conv(feat) + point_feat #+ 0.1 * skip_out
+            fine = (self.final_conv(feat) + point_feat) * self.output_scale
         else:
             fine = self.final_conv(feat)
             print('size of fine is ', fine.size())
@@ -188,16 +200,16 @@ class PCN(nn.Module):
 
         if self.channels == 3:
             if self.classifier:
-                return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return, out_classifier
+                return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return, out_classifier, attn_weights
             else:
-                return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return
+                return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return, attn_weights
         else:
             fine_xyz = fine_xyz.transpose(2, 1).contiguous()
             fine_sigma = fine_sigma.transpose(2, 1).contiguous()
             if self.classifier:
-                return (coarse_xyz.contiguous(), coarse_sigma.contiguous()), (fine_xyz, fine_sigma), feature_global_return, out_classifier
+                return (coarse_xyz.contiguous(), coarse_sigma.contiguous()), (fine_xyz, fine_sigma), feature_global_return, out_classifier, attn_weights
             else:
-                return (coarse_xyz.contiguous(), coarse_sigma.contiguous()), (fine_xyz, fine_sigma), feature_global_return
+                return (coarse_xyz.contiguous(), coarse_sigma.contiguous()), (fine_xyz, fine_sigma), feature_global_return, attn_weights
 
 
 class ImprovedClassifier(nn.Module):

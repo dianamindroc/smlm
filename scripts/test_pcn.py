@@ -17,11 +17,12 @@ from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric
 from torchvision import transforms
 from model_architectures.transforms import ToTensor, Padding
 from dataset.SMLMDataset import Dataset
+from dataset.Dataset import PairedAnisoIsoDataset
 from helpers.data import get_highest_shape
 from joblib import dump, load
 from model_architectures.pcn_decoder import PCNDecoderOnly
 
-ckpt = torch.load('/home/dim26fa/coding/training/logs_pcn_20241009_225619/best_l1_cd.pth')
+ckpt = torch.load('/home/dim26fa/coding/training/logs_pcn_20250326_161041/best_l1_cd.pth')
 model = PCN(classifier=True)
 model_state_dict = model.state_dict()
 # Filter out layers with size mismatches
@@ -133,94 +134,148 @@ def load_pca_model(log_dir, epoch):
 
 
 def test_single_category(model, device, test_config, log_dir, save=True):
+    """
+    Test a model on a single category of point cloud data.
+
+    Args:
+        model: The PCN model to test
+        device: Device to run inference on (cuda/cpu)
+        device: Device to run inference on (cuda/cpu)
+        test_config: Configuration settings for testing
+        log_dir: Directory to save results
+        save: Whether to save output point clouds as PLY files
+
+    Returns:
+        Dictionary containing metrics and result arrays
+    """
+    # Get shape information and prepare transforms
     highest_shape = get_highest_shape(test_config['root_folder'], test_config['classes_to_use'])
+    pc_transforms = transforms.Compose([Padding(highest_shape), ToTensor()])
 
-    pc_transforms = transforms.Compose(
-        [Padding(highest_shape), ToTensor()])
+    # Create dataset and dataloader
+    test_dataset = PairedAnisoIsoDataset(
+        root_folder=test_config['root_folder'],
+        suffix=test_config['suffix'],
+        transform=pc_transforms,
+        classes_to_use=test_config['classes_to_use'],
+        remove_part_prob=test_config['remove_part_prob'],
+        remove_corners=test_config['remove_corners'],
+        remove_outliers=test_config['remove_outliers'],
+        number_corners_to_remove=test_config['num_corners_remove']
+    )
 
-    test_dataset = Dataset(root_folder=test_config['root_folder'],
-                           suffix=test_config['suffix'],
-                           transform=pc_transforms,
-                           classes_to_use=test_config['classes_to_use'],
-                           data_augmentation=False,
-                           remove_part_prob=test_config['remove_part_prob'],
-                           remove_corners=test_config['remove_corners'],
-                           remove_outliers=test_config['remove_outliers'],
-                           anisotropy=test_config['anisotropy'],
-                           anisotropy_axis=test_config['anisotropy_axis'],
-                           anisotropy_factor=test_config['anisotropy_factor'],
-                           number_corners_to_remove=test_config['num_corners_remove'])
-    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0)
+    test_dataloader = torch.utils.data.DataLoader(
+        test_dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=0
+    )
 
-    index = 1
+    # Initialize metrics and result containers
     total_l1_cd, total_l2_cd = 0.0, 0.0
-    feature_space = list()
+    feature_space = []
     labels_list = []
     corner_label_list = []
     corner_name = []
     l1cd_list = []
     l2cd_list = []
+    out_classifier_list = []
+    labels_names = []
+
+    # Process each sample
     with torch.no_grad():
-        out_classifier_list = []
-        labels_names = []
         for i, data in enumerate(test_dataloader):
-            c = data['pc']
-            c = c[:, :, :3]
-            p = data['partial_pc']
-            p = p[:, :, :3]
-            c_anisotropic = data['pc_anisotropic']
-            c_anisotropic = c_anisotropic[:, :, :3]
-            mask_complete = data['pc_mask']
-            filename = os.path.basename(data['path'][0])
-            label = data['label']
-            corner_label = data['corner_label']
-            p = p.permute(0, 2, 1)
-            p, c, label, corner_label = p.to(device), c.to(device), label.to(device), corner_label.to(device)
-            _, c_, feature_global, out_classifier = model(p)
-            print('feature_space shape:', feature_global.shape)
-            total_l1_cd += l1_cd(c_, c).item()
-            l1cd_list.append(l1_cd(c_, c).item())
-            total_l2_cd += l2_cd(c_, c).item()
-            l2cd_list.append(l2_cd(c_, c).item())
-            input_pc = p[0].detach().cpu().numpy()
-            input_pc = np.transpose(input_pc, (1, 0))
-            output_pc = c_[0].detach().cpu().numpy()
-            gt = c[0].detach().cpu().numpy()
-            label = data['label'].numpy()  # Assuming 'label' is present in your dataset
-            labels_list.append(label)
+            # Extract and prepare input data
+            input_pc = data['partial_pc'][:, :, :3].permute(0, 2, 1).to(device)
+            gt_pc = data['pc'][:, :, :3].to(device)
+            filename = os.path.basename(data['filename'][0])
+            #label = data['label'].to(device)
+            #corner_label = data['corner_label'].to(device)
+
+            # Forward pass through model
+            _, output_pc, feature_global, out_classifier, attn_weights = model(input_pc)
+
+            # Calculate metrics
+            l1_error = l1_cd(output_pc, gt_pc).item()
+            l2_error = l2_cd(output_pc, gt_pc).item()
+            total_l1_cd += l1_error
+            total_l2_cd += l2_error
+            l1cd_list.append(l1_error)
+            l2cd_list.append(l2_error)
+
+            # Store results
+            labels_list.append(data['label'].numpy())
             labels_names.append(data['label_name'])
             corner_label_list.append(data['corner_label'].numpy())
             corner_name.append(data['corner_label_name'])
-            if save:
-                export_ply(os.path.join(log_dir, f'{index:03d}_input_{filename}.ply'), input_pc)
-                export_ply(os.path.join(log_dir, f'{index:03d}_output{filename}.ply'), output_pc)
-                export_ply(os.path.join(log_dir, f'{index:03d}_gt{filename}.ply'), gt)
-            print('feature_global[0] shape is:', feature_global[0].shape)
             feature_space.append(feature_global[0].detach().cpu().numpy())
-            out_classifier = F.softmax(out_classifier, dim=1)
-            out_classifier_list.append(out_classifier.detach().cpu().numpy())
+            out_classifier_list.append(F.softmax(out_classifier, dim=1).detach().cpu().numpy())
 
-            index += 1
-    avg_l1_cd = total_l1_cd / len(test_dataset)
-    avg_l2_cd = total_l2_cd / len(test_dataset)
-    #    avg_f_score = total_f_score / len(test_dataset)
+            # Save output point clouds if requested
+            if save:
+                # Detach and move tensors to CPU for saving
+                input_np = input_pc[0].permute(1, 0).detach().cpu().numpy()
+                output_np = output_pc[0].detach().cpu().numpy()
+                gt_np = gt_pc[0].detach().cpu().numpy()
+                attn_matrix = attn_weights.detach().cpu().numpy()
+
+                # Save as PLY files
+                export_ply(os.path.join(log_dir, f'{i + 1:03d}_input_{filename}.ply'), input_np)
+                export_ply(os.path.join(log_dir, f'{i + 1:03d}_output{filename}.ply'), output_np)
+                export_ply(os.path.join(log_dir, f'{i + 1:03d}_gt{filename}.ply'), gt_np)
+                np.save(os.path.join(log_dir, f'{i + 1:03d}_attn_matrix.npy'), attn_matrix)
+
+    # Calculate average metrics
+    dataset_size = len(test_dataset)
+    avg_l1_cd = total_l1_cd / dataset_size
+    avg_l2_cd = total_l2_cd / dataset_size
+
+    # Consolidate results
     labels_array = np.concatenate(labels_list, axis=0)
     labels_names = np.concatenate(labels_names)
     corner_array = np.concatenate(corner_label_list)
     corner_name = np.concatenate(corner_name)
     out_classifier_array = np.concatenate(out_classifier_list, axis=0)
     predicted_class_array = np.argmax(out_classifier_array, axis=1)
-    return avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, corner_array, corner_name, out_classifier_array, predicted_class_array
+
+    # Return results as a dictionary
+    return {
+        'avg_l1_cd': avg_l1_cd,
+        'avg_l2_cd': avg_l2_cd,
+        'feature_space': feature_space,
+        'labels': labels_array,
+        'label_names': labels_names,
+        'corner_labels': corner_array,
+        'corner_names': corner_name,
+        'classifier_outputs': out_classifier_array,
+        'predicted_classes': predicted_class_array,
+        'l1_errors': np.array(l1cd_list),  # Including individual errors for analysis
+        'l2_errors': np.array(l2cd_list)
+    }
 
 
 def test(config, save=True):
-    features = list()
-    config = cfg_from_yaml_file(config)
+    """
+    Run testing on the point cloud model using the provided configuration.
+
+    Args:
+        config: Path to YAML config file or config object
+        save: Whether to save test results (default: True)
+
+    Returns:
+        Dictionary containing test metrics and result data
+    """
+    # Load configuration if string path provided
+    if isinstance(config, str):
+        config = cfg_from_yaml_file(config)
+
+    # Extract test configuration for the dataset
     test_config = {
         'root_folder': config.dataset.root_folder,
         'classes_to_use': config.dataset.classes,
         'save': config.test.save,
         'ckpt_path': config.test.ckpt_path,
+        'ckpt_path_class': config.test.ckpt_path_class,
         'suffix': config.dataset.suffix,
         'remove_part_prob': config.dataset.remove_part_prob,
         'remove_corners': config.dataset.remove_corners,
@@ -229,16 +284,35 @@ def test(config, save=True):
         'anisotropy_axis': config.dataset.anisotropy_axis,
         'remove_outliers': config.dataset.remove_outliers,
         'classifier': config.test.classifier,
-        'num_corners_remove': config.dataset.number_corners_remove}
-    if save:
-        log_dir = create_log_folder(config.test.log_dir, config.model)
+        'num_corners_remove': config.dataset.number_corners_remove,
+        'grid_size': config.test.grid_size,
+        'num_dense': config.test.num_dense,
+        'latent_dim': config.test.latent_dim,
+        'channels': config.test.channels
+    }
 
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    # Create log directory if saving results
+    log_dir = create_log_folder(config.test.log_dir, config.model) if save else None
 
-    # load pretrained model
-    model = PCN(16384, 1024, 4, classifier=test_config['classifier']).to(device)
-    state_dict = torch.load(test_config['ckpt_path'])
-    if 'mlp3.weight' in state_dict.keys():
+    # Set up device (GPU if available, otherwise CPU)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    if test_config['num_dense'] == 'highest':
+        num_dense = get_highest_shape(test_config['root_folder'], test_config['classes_to_use'])
+        print(f'Highest shape: {num_dense}')
+    else:
+        num_dense = test_config['num_dense']
+
+    # Print header for metrics table
+    print('\033[33m{:20s}{:20s}{:20s}\033[0m'.format('Category', 'L1_CD(1e-3)', 'L2_CD(1e-4)'))
+    print('\033[33m{:20s}{:20s}{:20s}\033[0m'.format('--------', '-----------', '-----------'))
+
+    # Initialize model with configurable parameters
+    model_recon = PCN(num_dense, test_config['latent_dim'], test_config['grid_size'], classifier=config.test.classifier).to(device)
+    recon_state_dict = torch.load(config.test.ckpt_path)
+
+    # Handle loading models with incompatible keys
+    if 'mlp3.weight' in recon_state_dict.keys() and config.test.classifier is False:
         keys_to_remove = [
             "mlp1.weight", "mlp1.bias",
             "bn1_mlp.weight", "bn1_mlp.bias", "bn1_mlp.running_mean", "bn1_mlp.running_var",
@@ -249,20 +323,90 @@ def test(config, save=True):
             "mlp3.weight", "mlp3.bias"
         ]
 
-        # Assuming `my_dict` is your dictionary-like structure
         for key in keys_to_remove:
-            if key in state_dict:
-                del state_dict[key]
-    model.load_state_dict(state_dict, strict=False)
-    model.eval()
+            if key in recon_state_dict:
+                del recon_state_dict[key]
 
-    print('\033[33m{:20s}{:20s}{:20s}\033[0m'.format('Category', 'L1_CD(1e-3)', 'L2_CD(1e-4)'))
-    print('\033[33m{:20s}{:20s}{:20s}\033[0m'.format('--------', '-----------', '-----------'))
+    expected_dim = model_recon.mlp[4].bias.shape[0]
+    ckpt_dim = recon_state_dict['mlp.4.bias'].shape[0]
+    print(f'Expected dimension: {expected_dim}, ckpt dimension: {ckpt_dim}')
 
-    l1_cds, l2_cds = list(), list()
-    avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, corner_array, corner_name, out_classifier_array, pred_labels_array = test_single_category(model, device, test_config, log_dir, save)
-    print('\033[32m{:20s}{:20.4f}{:20.4f}\033[0m'.format('All', avg_l1_cd * 1e3, avg_l2_cd * 1e4))
-    return avg_l1_cd, avg_l2_cd, feature_space, labels_array, labels_names, corner_array, corner_name, out_classifier_array, pred_labels_array
+    #if ckpt_dim != expected_dim:
+        #num_dense = ckpt_dim
+        #model_recon = PCN(num_dense, test_config['latent_dim'], test_config['grid_size'],
+                          #classifier=config.test.classifier).to(device)
+
+    model_recon.load_state_dict(recon_state_dict, strict=False)
+    model_recon.eval()
+
+    results_recon = test_single_category(model_recon, device, test_config, log_dir, save)
+    print('\033[32m{:20s}{:20.4f}{:20.4f}\033[0m'.format(
+        'Recon Model', results_recon['avg_l1_cd'] * 1e3, results_recon['avg_l2_cd'] * 1e4
+    ))
+    # Load checkpoint
+    model_class = PCN(num_dense, test_config['latent_dim'], test_config['grid_size'],
+                      classifier=config.test.classifier).to(device)
+    class_state_dict = torch.load(config.test.ckpt_path_class)
+
+    model_class.load_state_dict(class_state_dict)
+    model_class.eval()
+
+    results_class = test_single_category(model_class, device, test_config, log_dir,
+                                         save=False)  # Don't save files twice
+    print('\033[32m{:20s}{:20.4f}{:20.4f}\033[0m'.format(
+        'Classifier Model', results_class['avg_l1_cd'] * 1e3, results_class['avg_l2_cd'] * 1e4
+    ))
+
+
+
+
+
+    # Run test on the dataset
+    #results = test_single_category(model, device, test_config, log_dir, save)
+
+    # Save results dictionary if log directory exists
+    if log_dir and save:
+        import pickle
+        import json
+        # Save as pickle (preserves numpy arrays and python objects)
+        with open(os.path.join(log_dir, 'results.pkl'), 'wb') as f:
+            pickle.dump(results_recon, f)
+
+        # Additionally save metrics as JSON for easy viewing
+        # Need to convert numpy arrays to lists for JSON serialization
+        json_safe_results = {}
+        for key, value in results_recon.items():
+            if isinstance(value, np.ndarray):
+                # Handle different array shapes
+                if value.ndim == 1:
+                    json_safe_results[key] = value.tolist()
+                else:
+                    # For higher dimensional arrays, just save shape information
+                    json_safe_results[key] = f"Array shape: {value.shape}"
+            elif isinstance(value, list) and value and isinstance(value[0], np.ndarray):
+                # For lists of arrays (like feature_space)
+                json_safe_results[key] = f"List of {len(value)} arrays, first shape: {value[0].shape}"
+            elif isinstance(value, (int, float, str, bool, list)):
+                json_safe_results[key] = value
+            else:
+                json_safe_results[key] = str(value)
+
+        # Save the JSON-compatible subset of results
+        with open(os.path.join(log_dir, 'metrics.json'), 'w') as f:
+            json.dump(json_safe_results, f, indent=2)
+
+        print(f"Results saved to {log_dir}")
+
+    # Print overall metrics with green highlighting
+    #print('\033[32m{:20s}{:20.4f}{:20.4f}\033[0m'.format(
+    #    'All', results['avg_l1_cd'] * 1e3, results['avg_l2_cd'] * 1e4
+    #))
+
+    return {
+        'reconstruction_model': results_recon,
+        'classifier_model': results_class
+    }
+
 
 import torch
 import torch.nn as nn
@@ -499,6 +643,24 @@ def calculate_mean_of_tensors(tensor_list: List[torch.Tensor]) -> float:
 
     # Calculate and return the mean
     return torch.mean(values).item()
+
+
+def get_min_chamfer(l1_errors):
+    min_l1 = float('inf')  # Initialize with infinity to find minimum
+    index_min = -1  # Initialize with invalid index
+
+    for i, l1 in enumerate(l1_errors):
+        if i < len(l1_errors) - 1:  # Check to prevent index out of range
+            if l1_errors[i + 1] < l1:  # Compare next value to current
+                if l1_errors[i + 1] < min_l1:  # Update only if it's the new minimum
+                    min_l1 = l1_errors[i + 1]
+                    index_min = i + 1
+
+    return {
+        'min_chamfer': min_l1,
+        'index_min': index_min
+            }
+
 
 
 if __name__ == '__main__':
