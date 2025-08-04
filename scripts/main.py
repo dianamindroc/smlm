@@ -21,11 +21,9 @@ from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric
 from dataset.SMLMDataset import Dataset
 from dataset.ShapeNet import ShapeNet
 from dataset.SMLMSimulator import DNAOrigamiSimulator
-from model_architectures.chamfer_distances import ChamferDistanceL2, ChamferDistanceL1
-from chamferdist import ChamferDistance
+from model_architectures.chamfer_distance_updated import ChamferDistance
 import warnings
 warnings.filterwarnings("ignore")
-#from chamfer_distance.chamfer_distance import ChamferDistance
 
 
 #TODO: add how to install pointnet2_ops and chamfer packages in your environment
