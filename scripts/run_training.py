@@ -1,5 +1,5 @@
 import argparse
-from train_pcn import train  # Replace 'your_module' with the module where your train function is located
+from train_pcn import train
 
 
 def main():
