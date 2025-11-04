@@ -16,6 +16,26 @@ Using mamba package manager, one can create a new environment for this repositor
 
 For installing Chamfer distance and pointnet2_ops: 
 
+1. Clone the original PCN repository (contains the custom CUDA ops that this project reuses):
+   ```
+   git clone https://github.com/qinglew/PCN-PyTorch.git third_party/PCN-PyTorch
+   ```
+   Make sure you have a recent CUDA toolkit and the `ninja` build system available in your environment before proceeding.
+
+2. Build and install the Chamfer Distance extension used by PCN:
+   ```
+   cd third_party/PCN-PyTorch/chamfer_distance
+   pip install .
+   ```
+
+3. Build and install the PointNet++ ops required by the models:
+   ```
+   cd ../pointnet2_ops_lib
+   pip install .
+   ```
+
+The `pip install .` command will compile the CUDA operators against the currently active environment and register them so they can be imported from this repository.
+
 ***
 
 ### Training

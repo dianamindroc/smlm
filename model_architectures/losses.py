@@ -2,7 +2,6 @@ import torch
 from model_architectures.chamfer_distance_updated import ChamferDistance
 import open3d as o3d
 import torch.nn as nn
-from scipy.spatial import cKDTree
 from scipy.optimize import minimize
 #from pytorch3d.loss import chamfer_distance
 
@@ -176,16 +175,21 @@ def _compute_density(points, k=10):
     - densities (torch.Tensor): Estimated density for each point [B, N].
     """
     B, N, _ = points.shape
-    densities = torch.zeros(B, N)
+    device = points.device
 
-    for b in range(B):
-        point_cloud = points[b].detach().cpu().numpy()
-        tree = cKDTree(point_cloud)
-        distances, _ = tree.query(point_cloud, k=k + 1)  # k+1 because the point itself is included
-        avg_distances = torch.tensor(distances[:, 1:].mean(axis=1), dtype=torch.float32)  # Exclude the first distance
-        densities[b] = 1 / (avg_distances + 1e-6)  # Add a small value to avoid division by zero
+    if N <= 1 or k == 0:
+        return torch.zeros(B, N, device=device, dtype=points.dtype)
 
-    return densities
+    k = min(k, N - 1)
+
+    # Pairwise distances between all points within a batch element.
+    pairwise_dist = torch.cdist(points, points, p=2)  # [B, N, N]
+
+    # Smallest distances include self-distance (0). Grab k+1 and drop the first column.
+    knn_distances, _ = torch.topk(pairwise_dist, k=k + 1, dim=-1, largest=False)
+    mean_neighbor_distance = knn_distances[..., 1:].mean(dim=-1)
+
+    return 1.0 / (mean_neighbor_distance + 1e-6)
 
 
 def _with_density(pred, gt, density_pred, density_gt):
@@ -382,5 +386,3 @@ class GMMLoss(nn.Module):
         nll = -torch.logsumexp(log_probs, dim=1)
 
         return nll.mean()
-
-

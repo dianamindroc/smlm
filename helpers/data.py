@@ -51,9 +51,12 @@ def get_highest_shape(root_folder, classes, subfolders=('iso', 'aniso'), suffix=
                 full_path = os.path.join(folder, file)
                 if os.path.isfile(full_path) and file.endswith(suffix):
                     try:
-                        df = pd.read_csv(full_path)
-                        if len(df) > highest:
-                            highest = len(df)
+                        with open(full_path, "r", encoding="utf-8") as fp:
+                            line_count = sum(1 for _ in fp)
+                        if line_count:
+                            line_count -= 1  # discount header row
+                        if line_count > highest:
+                            highest = line_count
                     except Exception as e:
                         print(f"Failed to read {full_path}: {e}")
     return highest

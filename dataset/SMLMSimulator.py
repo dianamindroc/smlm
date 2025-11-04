@@ -17,27 +17,31 @@ class DNAOrigamiSimulator(Dataset):
         self.remove_corners = remove_corners
         self.remove_points = remove_points
         self.transform = transform
-        self.data = self._simulate_datasets()
 
-    def _simulate_datasets(self):
-        dataset = []
         if self.structure_type == 'box':
             self.structure_ground_truth = self.get_corners_3d_box()
         elif self.structure_type == 'tetrahedron':
             self.structure_ground_truth = self.get_corners_3d_tetrahedron()
-        for _ in range(self.num_samples):
-            point_cloud = []
-            for corner in self.structure_ground_truth:
-                intensity = np.random.uniform(*self.dye_properties['intensity_range'])
-                precision = np.random.uniform(*self.dye_properties['precision_range'])
-                blinking_times = np.random.randint(*self.dye_properties['blinking_times_range'])
-                point_cloud.extend(self.simulate_blinks(corner, blinking_times, intensity, precision))
-            dataset.append((self.structure_ground_truth, np.array(point_cloud)))
-        return dataset
+        else:
+            raise ValueError(f"Unsupported structure_type: {self.structure_type}")
 
-    def _augment_data(self, point_cloud):
+        # Pre-generate seeds so each index yields deterministic samples without storing them.
+        rng = np.random.default_rng()
+        self._sample_seeds = rng.integers(low=0, high=np.iinfo(np.int64).max, size=self.num_samples, dtype=np.int64)
+
+    def _simulate_point_cloud(self, rng):
+        """Simulate a single point cloud using vectorized noise generation."""
+        simulated_points = []
+        for corner in self.structure_ground_truth:
+            intensity = rng.uniform(*self.dye_properties['intensity_range'])
+            precision = rng.uniform(*self.dye_properties['precision_range'])
+            blinking_times = rng.integers(*self.dye_properties['blinking_times_range'])
+            simulated_points.append(self.simulate_blinks(corner, blinking_times, intensity, precision, rng))
+        return np.concatenate(simulated_points, axis=0)
+
+    def _augment_data(self, point_cloud, rng):
         # Define a random rotation matrix
-        theta = np.random.uniform(0, 2 * np.pi)  # Rotation angle
+        theta = rng.uniform(0, 2 * np.pi)  # Rotation angle
         rotation_matrix = np.array([
             [np.cos(theta), -np.sin(theta), 0],
             [np.sin(theta), np.cos(theta), 0],
@@ -46,7 +50,7 @@ class DNAOrigamiSimulator(Dataset):
 
         # Apply the rotation to each point in the point cloud
         augmented_point_cloud = np.dot(point_cloud[:, :3], rotation_matrix.T)
-        #augmented_point_cloud = np.column_stack((augmented_point_cloud, point_cloud[:, 3:]))  # Append the intensity back
+        rotated_ground_truth = np.dot(self.structure_ground_truth, rotation_matrix.T)
         pc = augmented_point_cloud
 
         pc_without_corners = pc
@@ -64,9 +68,9 @@ class DNAOrigamiSimulator(Dataset):
             # Probability of removing a cluster
             p_remove_cluster = 0.5
 
-            if np.random.rand() < p_remove_cluster:
+            if rng.random() < p_remove_cluster:
                 # Randomly select a cluster to remove
-                cluster_to_remove = np.random.choice(n_clusters)
+                cluster_to_remove = rng.integers(0, n_clusters)
 
                 # Create a mask for points to keep
                 mask = kmeans.labels_ != cluster_to_remove
@@ -74,28 +78,20 @@ class DNAOrigamiSimulator(Dataset):
                 # Apply the mask to keep only the points that are not in the selected cluster
                 pc_without_corners = pc[mask]
 
-        # Do not use this yet
         if self.remove_points:
             # Probability of removing a point
             p_remove_point = 0.05
             num_points = len(pc)
-            remove_points = np.random.choice([True, False], num_points, p=[p_remove_point, 1 - p_remove_point])
-            point_cloud = pc[~remove_points]
-            pc = point_cloud
+            remove_points = rng.random(num_points) < p_remove_point
+            pc = pc[~remove_points]
 
-        return pc, pc_without_corners
+        return pc, pc_without_corners, rotated_ground_truth
 
     # Define the function to simulate blinks with Gaussian noise
     @staticmethod
-    def simulate_blinks(point, blinking_times, intensity, baseline_precision):
-        blinks = []
-        for _ in range(blinking_times):
-            intensity = intensity
-            noise = np.random.normal(0, baseline_precision, 3)
-            noisy_point = point + noise
-            # blinks.append(np.append(noisy_point, intensity))
-            blinks.append(noisy_point)
-        return blinks
+    def simulate_blinks(point, blinking_times, intensity, baseline_precision, rng):
+        noise = rng.normal(0, baseline_precision, size=(blinking_times, 3))
+        return point + noise
 
     # Define the function to get the corners of a 3D box
     @staticmethod
@@ -129,22 +125,29 @@ class DNAOrigamiSimulator(Dataset):
         return np.array(corners)
 
     def __len__(self):
-        return len(self.data)
+        return self.num_samples
 
     def __getitem__(self, idx):
-        ground_truth, point_cloud = self.data[idx]
+        rng = np.random.default_rng(self._sample_seeds[idx])
+        point_cloud = self._simulate_point_cloud(rng)
         pc_without_corners = None
+        ground_truth = self.structure_ground_truth.copy()
+
         if self.augment:
-            point_cloud, pc_without_corners = self._augment_data(point_cloud)
-        if self.transform is not None:
-            point_cloud = self.transform(point_cloud)
-            if pc_without_corners is not None:
-                pc_without_corners = self.transform(pc_without_corners)
+            point_cloud, pc_without_corners, ground_truth = self._augment_data(point_cloud, rng)
 
         label = self.structure_type
+        partial = pc_without_corners if pc_without_corners is not None else point_cloud
 
-        sample = {'pc': point_cloud,
-                  'partial_pc': pc_without_corners,
-                  'label': label}
+        sample = {
+            'pc': point_cloud,
+            'pc_anisotropic': point_cloud,
+            'partial_pc': partial,
+            'ground_truth': ground_truth,
+            'label': label,
+        }
+
+        if self.transform is not None:
+            sample = self.transform(sample)
 
         return sample
