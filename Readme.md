@@ -18,7 +18,7 @@ For installing Chamfer distance and pointnet2_ops:
 
 1. Clone the original PCN repository (contains the custom CUDA ops that this project reuses):
    ```
-   git clone https://github.com/qinglew/PCN-PyTorch.git third_party/PCN-PyTorch
+   git clone https://github.com/qinglew/PCN-PyTorch.git
    ```
    Make sure you have a recent CUDA toolkit and the `ninja` build system available in your environment before proceeding.
 
