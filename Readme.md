@@ -24,7 +24,7 @@ For installing Chamfer distance and pointnet2_ops:
 
 2. Build and install the Chamfer Distance extension used by PCN:
    ```
-   cd third_party/PCN-PyTorch/chamfer_distance
+   cd /PCN-PyTorch/extensions/chamfer_distance
    pip install .
    ```
 
