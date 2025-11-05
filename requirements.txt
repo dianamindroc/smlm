@@ -1,7 +1,7 @@
 # Essential Dependencies
 torch==2.4.0+cu124 torchvision==0.19.0+cu124 torchaudio==2.4.0+cu124 --index-url https://download.pytorch.org/whl/cu124
 triton>=2.2.0
-numpy>=1.26
+numpy<=1.26.4
 scipy>=1.9.1
 scikit-learn>=1.2.2
 scikit-image>=0.20.0
