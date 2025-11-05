@@ -2,7 +2,6 @@ import argparse
 import torch
 
 import torch.optim as optim
-import wandb
 import os
 from torchvision import transforms
 import numpy as np
@@ -14,6 +13,11 @@ import matplotlib.pyplot as plt
 import matplotlib
 from joblib import dump
 from scipy.spatial.transform import Rotation as R
+
+try:
+    import wandb  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    wandb = None
 
 matplotlib.use('Agg')
 
@@ -35,9 +39,26 @@ warnings.filterwarnings("ignore")
 def train(config, exp_name=None, fixed_alpha=None):
     global total_cd_l1
     set_seed(42)
-    wandb.login()
     torch.backends.cudnn.benchmark = True
     config = cfg_from_yaml_file(config)
+
+    use_wandb = bool(getattr(config.train, 'use_wandb', False))
+    if use_wandb:
+        if wandb is None:
+            raise ImportError("Weights & Biases is not installed but config.train.use_wandb is True.")
+        wandb.login()
+
+    def wandb_log(data, **kwargs):
+        if use_wandb:
+            wandb.log(data, **kwargs)
+
+    def wandb_set_config(key, value):
+        if use_wandb:
+            wandb.config[key] = value
+
+    export_samples_every = getattr(config.train, 'export_samples_every', 0)
+    log_pointclouds = bool(getattr(config.train, 'log_pointclouds', False))
+
     train_config = {
         "lr": config.train.lr,
         "batch_size": config.train.batch_size,
@@ -223,15 +244,16 @@ def train(config, exp_name=None, fixed_alpha=None):
         #model.mlp.requires_grad_(False)
         #print('Frozen all but last layer')
 
-    if exp_name is not None:
-        wandb.init(project='autoencoder training', name=exp_name, config=train_config)
-    else:
-        wandb.init(project='autoencoder training', name='PCN_tetranup', config=train_config)
-    wandb.config['optimizer_recon'] = optimizer_recon
-    if train_config['classifier']:
-        wandb.config['optimizer_class'] = optimizer_mlp
-    if fixed_alpha is not None:
-        wandb.config['fixed_alpha'] = fixed_alpha
+    if use_wandb:
+        if exp_name is not None:
+            wandb.init(project='autoencoder training', name=exp_name, config=train_config)
+        else:
+            wandb.init(project='autoencoder training', name='PCN_tetranup', config=train_config)
+        wandb_set_config('optimizer_recon', optimizer_recon)
+        if train_config['classifier']:
+            wandb_set_config('optimizer_class', optimizer_mlp)
+        if fixed_alpha is not None:
+            wandb_set_config('fixed_alpha', fixed_alpha)
 
     # training
     best_cd_l1 = 1e8
@@ -246,12 +268,16 @@ def train(config, exp_name=None, fixed_alpha=None):
     early_stop_counter = 0
     early_stop_patience = config.train.early_stop_patience
     for epoch in range(1, train_config['num_epochs'] + 1):
-        wandb.log({'epoch': epoch})
+        wandb_log({'epoch': epoch})
         # hyperparameter alpha
         if fixed_alpha is not None:
             alpha = fixed_alpha
         else:
             alpha = adjust_alpha(epoch)
+
+        # Determine logging/export schedule for this epoch
+        should_export_epoch = bool(export_samples_every and (epoch % export_samples_every == 0))
+        should_log_pointclouds_epoch = bool(should_export_epoch and log_pointclouds and use_wandb)
 
         # training
         model.train()
@@ -341,8 +367,8 @@ def train(config, exp_name=None, fixed_alpha=None):
                 # loss1 = losses.cd_loss_l1(rotated_reconstructions, c)
                 # loss2 = losses.cd_loss_l1(rotated_reconstructions, c)
                 loss = loss1 + alpha * loss2
-                wandb.log({'coarse_loss': loss1 * 1e3})
-                wandb.log({'dense_loss': loss2 * 1e3})
+                wandb_log({'coarse_loss': loss1 * 1e3})
+                wandb_log({'dense_loss': loss2 * 1e3})
 
             if train_config['classifier']:
                 label = label.to(torch.long)
@@ -360,9 +386,11 @@ def train(config, exp_name=None, fixed_alpha=None):
         print("Train Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
                                                                                  loss * 1e3))
 
-        wandb.log({'train_l1_cd': loss * 1e3})
-        wandb.log({'alpha': alpha})
-        export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)), dense_pred[0].detach().cpu().numpy())
+        wandb_log({'train_l1_cd': loss * 1e3})
+        wandb_log({'alpha': alpha})
+        if should_export_epoch:
+            export_ply(os.path.join(log_dir, '{:03d}_train_pred.ply'.format(epoch)),
+                       dense_pred[0].detach().cpu().numpy())
         if train_config['loss'] == 'adapted':
             del p, c, coarse_pred, dense_pred, cd_loss, density_pred, density_gt, loss, density_loss  #, sparsity_loss
         torch.cuda.empty_cache()
@@ -379,6 +407,8 @@ def train(config, exp_name=None, fixed_alpha=None):
         labels_names = []
         with torch.no_grad():
             rand_iter = random.randint(0, len(val_dataloader) - 1)
+            should_export = should_export_epoch
+            should_log_pointclouds = should_log_pointclouds_epoch
             # for visualization
             #### ShapeNet dataset
             #for i, (p, c) in enumerate(val_dataloader):
@@ -392,8 +422,8 @@ def train(config, exp_name=None, fixed_alpha=None):
                 c_anisotropic = data['pc_anisotropic']
                 #rot = data['rotation']
                 #filenames = [os.path.basename(path) for path in data['path']]
-                filenames_iso = [os.path.basename(path) for path in data['iso_path']]
-                filenames_aniso = [os.path.basename(path) for path in data['aniso_path']]
+                iso_paths = data['iso_path'] if 'iso_path' in data else data.get('path', [])
+                filenames_iso = [os.path.basename(path) for path in iso_paths]
                 if train_config['channels'] == 3:
                     c = c[:, :, :3]
                     p = p[:, :, :3]
@@ -441,8 +471,9 @@ def train(config, exp_name=None, fixed_alpha=None):
                 total_cd_l1 += cd_loss
                 mlp_loss = losses.mlp_loss_function(label, out_classifier)
 
-                if i == rand_iter:
-                    j = random.randint(0, len(filenames_iso) - 1)
+                if i == rand_iter and should_export:
+                    max_index = len(filenames_iso) if filenames_iso else len(c)
+                    j = random.randint(0, max_index - 1)
                     if train_config['autoencoder']:
                         input_pc = c_anisotropic[j].detach().cpu().numpy()
                     else:
@@ -453,7 +484,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                     gt = c[j].detach().cpu().numpy()
                     coarse = coarse_pred[j].detach().cpu().numpy()
                     attn_matrix = attn_weights[j].detach().cpu().numpy()
-                    sample_filename = filenames_iso[j].replace('.csv', '')
+                    sample_filename = filenames_iso[j].replace('.csv', '') if filenames_iso else f'sample_{j}'
 
                     # Export PLY files
                     export_ply(os.path.join(log_dir, f'{epoch:03d}_input_{sample_filename}.ply'), input_pc)
@@ -463,16 +494,16 @@ def train(config, exp_name=None, fixed_alpha=None):
                     np.save(os.path.join(log_dir,f'{epoch:03d}_attn_matrix.npy'), attn_matrix)
                     #export_ply(os.path.join(log_dir, f'{epoch:03d}_rotatedoutput_{sample_filename}.ply'), rotated_output)
 
-                    # Log to wandb
-                    wandb.log({
-                        "point_cloud_val": [
-                            wandb.Object3D(gt[:, :3]),
-                            wandb.Object3D(input_pc[:, :3]),
-                            wandb.Object3D(output_pc[:, :3])
-                        ],
-                        "logged_sample_filename": sample_filename,
-                        "epoch": epoch
-                    })
+                    if should_log_pointclouds:
+                        wandb_log({
+                            "point_cloud_val": [
+                                wandb.Object3D(gt[:, :3]),
+                                wandb.Object3D(input_pc[:, :3]),
+                                wandb.Object3D(output_pc[:, :3])
+                            ],
+                            "logged_sample_filename": sample_filename,
+                            "epoch": epoch
+                        })
 
 
             min_lr = train_config['min_lr']  # This allows 4 zeros after the decimal point, but not 5
@@ -501,7 +532,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                             current_lr = min_lr
 
                         if prev_lr != current_lr:
-                            wandb.log({"lr": current_lr})
+                            wandb_log({"lr": current_lr})
                             print(f"Learning rate updated to: {current_lr:.5f}")
                     else:
                         print(f"Learning rate already at minimum: {prev_lr:.5f}")
@@ -519,8 +550,8 @@ def train(config, exp_name=None, fixed_alpha=None):
             plot_tsne(feature_array, corner_array, corner_name, 111, log_dir)
             pca = plot_pca(feature_array, labels_array, labels_names, epoch, log_dir)
             save_pca_model(pca, log_dir, epoch)
-            wandb.log({'val_l1_cd': total_cd_l1 * 1e3})
-            wandb.log({'mlp_loss': mlp_loss * 1e3})
+            wandb_log({'val_l1_cd': total_cd_l1 * 1e3})
+            wandb_log({'mlp_loss': mlp_loss * 1e3})
 
         if total_cd_l1 < best_cd_l1:
             best_epoch_l1 = epoch

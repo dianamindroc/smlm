@@ -48,6 +48,9 @@ train:
   num_dense: 1470
   latent_dim: 1024
   grid_size: 2
+  use_wandb: False
+  export_samples_every: 0
+  log_pointclouds: False
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024
