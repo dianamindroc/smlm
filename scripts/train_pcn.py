@@ -58,6 +58,7 @@ def train(config, exp_name=None, fixed_alpha=None):
 
     export_samples_every = getattr(config.train, 'export_samples_every', 0)
     log_pointclouds = bool(getattr(config.train, 'log_pointclouds', False))
+    max_vis_samples = getattr(config.train, 'max_vis_samples', 2000)
 
     train_config = {
         "lr": config.train.lr,
@@ -267,6 +268,7 @@ def train(config, exp_name=None, fixed_alpha=None):
     changed_lr = False
     early_stop_counter = 0
     early_stop_patience = config.train.early_stop_patience
+    pca = None
     for epoch in range(1, train_config['num_epochs'] + 1):
         wandb_log({'epoch': epoch})
         # hyperparameter alpha
@@ -402,9 +404,9 @@ def train(config, exp_name=None, fixed_alpha=None):
         total_cd_l1 = 0.0
         labels_list = []
         corner_label_list = []
-        corner_name = []
+        corner_name_list = []
         feature_space = []
-        labels_names = []
+        label_name_list = []
         with torch.no_grad():
             rand_iter = random.randint(0, len(val_dataloader) - 1)
             should_export = should_export_epoch
@@ -463,8 +465,8 @@ def train(config, exp_name=None, fixed_alpha=None):
 
                 labels_list.append(data['label'].numpy())
                 corner_label_list.append(data['corner_label'].numpy())
-                corner_name.append(data['corner_label_name'])
-                labels_names.append(data['label_name'])
+                corner_name_list.append(np.array(data['corner_label_name']))
+                label_name_list.append(np.array(data['label_name']))
                 feature_space.extend(features.detach().cpu().numpy())
 
                 cd_loss = losses.l1_cd(dense_pred, c).item()
@@ -541,15 +543,19 @@ def train(config, exp_name=None, fixed_alpha=None):
             print(
                 "Validate Epoch [{:03d}/{:03d}]: L1 Chamfer Distance = {:.6f}".format(epoch, train_config['num_epochs'],
                                                                                       total_cd_l1 * 1e3))
-            feature_array = np.vstack(feature_space)
-            labels_array = np.concatenate(labels_list)
-            corner_array = np.concatenate(corner_label_list)
-            labels_names = np.concatenate(labels_names)
-            corner_name = np.concatenate(corner_name)
-            plot_tsne(feature_array, labels_array, labels_names, epoch, log_dir)
-            plot_tsne(feature_array, corner_array, corner_name, 111, log_dir)
-            pca = plot_pca(feature_array, labels_array, labels_names, epoch, log_dir)
-            save_pca_model(pca, log_dir, epoch)
+            if feature_space:
+                feature_array = np.vstack(feature_space)
+                labels_array = np.concatenate(labels_list) if labels_list else np.array([])
+                corner_array = np.concatenate(corner_label_list) if corner_label_list else np.array([])
+                label_names_array = np.concatenate(label_name_list) if label_name_list else np.array([])
+                corner_name_array = np.concatenate(corner_name_list) if corner_name_list else np.array([])
+                plot_tsne(feature_array, labels_array, label_names_array, epoch, log_dir,
+                          max_samples=max_vis_samples, random_state=epoch)
+                plot_tsne(feature_array, corner_array, corner_name_array, epoch + 1000, log_dir,
+                          max_samples=max_vis_samples, random_state=epoch + 1000)
+                pca = plot_pca(feature_array, labels_array, label_names_array, epoch, log_dir, pca,
+                               max_samples=max_vis_samples, random_state=epoch)
+                save_pca_model(pca, log_dir, epoch)
             wandb_log({'val_l1_cd': total_cd_l1 * 1e3})
             wandb_log({'mlp_loss': mlp_loss * 1e3})
 
@@ -579,62 +585,90 @@ def export_ply(filename, points):
     o3d.io.write_point_cloud(filename, pc, write_ascii=True)
 
 
-def plot_tsne(features, labels, labels_names, epoch, log_dir):
-    #color_map = {0: '#009999', 1: '#FFB266'}
-    label_to_name = {label: name for label, name in zip(np.unique(labels), np.unique(labels_names))}
+def _build_label_map(labels, names):
+    mapping = {}
+    for label, name in zip(labels, names):
+        if label not in mapping:
+            mapping[label] = name
+    return mapping
 
-    tsne = TSNE(n_components=2)
+
+def _subsample_indices(length, max_samples, rng):
+    if length <= max_samples:
+        return np.arange(length)
+    return rng.choice(length, max_samples, replace=False)
+
+
+def plot_tsne(features, labels, labels_names, epoch, log_dir, max_samples=2000, random_state=42):
+    if len(features) == 0:
+        return
+
+    rng = np.random.default_rng(random_state)
+    features = np.asarray(features)
+    labels = np.asarray(labels)
+    labels_names = np.asarray(labels_names)
+
+    indices = _subsample_indices(len(features), max_samples, rng)
+    features = features[indices]
+    labels = labels[indices]
+    labels_names = labels_names[indices]
+
+    label_to_name = _build_label_map(labels, labels_names)
+
+    tsne = TSNE(n_components=2, init='pca', random_state=random_state, learning_rate='auto')
     tsne_results = tsne.fit_transform(features)
-    unique_labels = np.unique(labels)
-    colors = plt.cm.get_cmap('nipy_spectral', len(unique_labels))
-    for i, label in enumerate(unique_labels):
-        # Find points in this cluster
-        idx = labels == label
-        label_name = label_to_name[label]
-        # Plot these points with a unique color and label
-        plt.scatter(tsne_results[idx, 0], tsne_results[idx, 1], c=[colors(i)], label=f'Cluster {label_name}')
-    plt.title(f't-SNE visualization (Epoch {epoch})')
-    plt.xlabel('t-SNE Dimension 1')
-    plt.ylabel('t-SNE Dimension 2')
-    plt.legend()
-
-    # Save the plot with a specific filename format
-    plt.savefig(os.path.join(log_dir, '{:03d}_tsne.png'.format(epoch)))
-    # Close the figure to free memory
-    plt.close()
-
-
-def plot_pca(features, labels, labels_names, epoch, log_dir, pca=None):
-    # Create a mapping from label to name
-    label_to_name = {label: name for label, name in zip(np.unique(labels), np.unique(labels_names))}
-
-    if pca is None:
-        pca = PCA(n_components=2)
-        pca_results = pca.fit_transform(features)
-    else:
-        pca_results = pca.transform(features)
-
-    # Perform PCA
-    pca = PCA(n_components=2)
-    pca_results = pca.fit_transform(features)
-
-    # Plot the results
     unique_labels = np.unique(labels)
     colors = plt.cm.get_cmap('nipy_spectral', len(unique_labels))
 
     plt.figure(figsize=(10, 8))
     for i, label in enumerate(unique_labels):
         idx = labels == label
-        label_name = label_to_name[label]
-        plt.scatter(pca_results[idx, 0], pca_results[idx, 1], c=[colors(i)], label=f'Cluster {label_name}')
+        label_name = label_to_name.get(label, str(label))
+        plt.scatter(tsne_results[idx, 0], tsne_results[idx, 1], c=[colors(i)], label=f'Cluster {label_name}', s=10)
+    plt.title(f't-SNE visualization (Epoch {epoch})')
+    plt.xlabel('t-SNE Dimension 1')
+    plt.ylabel('t-SNE Dimension 2')
+    plt.legend()
+    plt.savefig(os.path.join(log_dir, f'{epoch:03d}_tsne.png'))
+    plt.close()
+
+
+def plot_pca(features, labels, labels_names, epoch, log_dir, pca=None, max_samples=2000, random_state=42):
+    if len(features) == 0:
+        return pca
+
+    rng = np.random.default_rng(random_state)
+    features = np.asarray(features)
+    labels = np.asarray(labels)
+    labels_names = np.asarray(labels_names)
+
+    indices = _subsample_indices(len(features), max_samples, rng)
+    features_subset = features[indices]
+    labels_subset = labels[indices]
+    label_names_subset = labels_names[indices]
+
+    label_to_name = _build_label_map(labels_subset, label_names_subset)
+
+    if pca is None:
+        pca = PCA(n_components=2, random_state=random_state)
+        pca_results = pca.fit_transform(features_subset)
+    else:
+        pca_results = pca.transform(features_subset)
+
+    unique_labels = np.unique(labels_subset)
+    colors = plt.cm.get_cmap('nipy_spectral', len(unique_labels))
+
+    plt.figure(figsize=(10, 8))
+    for i, label in enumerate(unique_labels):
+        idx = labels_subset == label
+        label_name = label_to_name.get(label, str(label))
+        plt.scatter(pca_results[idx, 0], pca_results[idx, 1], c=[colors(i)], label=f'Cluster {label_name}', s=10)
 
     plt.title(f'PCA visualization (Epoch {epoch})')
     plt.xlabel('First Principal Component')
     plt.ylabel('Second Principal Component')
     plt.legend()
-
-    # Save the plot
-    plt.savefig(f'{log_dir}/pca_visualization_epoch_{epoch}.png')
+    plt.savefig(os.path.join(log_dir, f'pca_visualization_epoch_{epoch}.png'))
     plt.close()
 
     return pca

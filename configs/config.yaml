@@ -51,6 +51,7 @@ train:
   use_wandb: False
   export_samples_every: 0
   log_pointclouds: False
+  max_vis_samples: 2000
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024
