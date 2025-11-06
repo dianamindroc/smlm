@@ -5,13 +5,17 @@ import torch
 import torchvision
 import matplotlib.pyplot as plt
 import torch.nn as nn
-from pointnet2_ops import pointnet2_utils
 import yaml
 from easydict import EasyDict
 from types import SimpleNamespace
 import open3d as o3d
 from model_architectures.losses import l1_cd, l2_cd
 import os
+
+try:
+    from pointnet2_ops import pointnet2_utils  # type: ignore
+except ImportError:
+    pointnet2_utils = None
 
 def show_point_cloud(point_cloud, axis=False):
     """visual a point cloud
@@ -119,6 +123,8 @@ def fps(data, number):
         data B N 3
         number int
     '''
+    if pointnet2_utils is None:
+        raise ImportError("pointnet2_ops is not installed; FPS requires pointnet2_ops.")
     fps_idx = pointnet2_utils.furthest_point_sample(data, number)
     fps_data = pointnet2_utils.gather_operation(data.transpose(1, 2).contiguous(), fps_idx).transpose(1,2).contiguous()
     return fps_data

@@ -10,9 +10,21 @@
 import torch
 import torch.nn as nn
 from timm.models.layers import DropPath
-from pointnet2_ops import pointnet2_utils
 #from utils.logger import *
 import einops
+
+try:
+    from pointnet2_ops import pointnet2_utils  # type: ignore
+except ImportError:
+    pointnet2_utils = None
+
+
+def _require_pointnet2():
+    if pointnet2_utils is None:
+        raise ImportError(
+            "pointnet2_ops is not installed. Transformer utilities that rely on "
+            "PointNet++ operations are unavailable without this optional dependency."
+        )
 
 
 def knn_point(nsample, xyz, new_xyz):
@@ -198,6 +210,7 @@ class DeformableLocalAttention(nn.Module):
         )
 
     def forward(self, x, pos, idx=None):
+        _require_pointnet2()
         B, N, C = x.shape
         # given N token and pos
         assert len(pos.shape) == 3 and pos.size(
@@ -319,6 +332,7 @@ class DeformableLocalCrossAttention(nn.Module):
             If perform a self-attn, just use
                 q = x, v = x, q_pos = pos, v_pos = pos
         '''
+        _require_pointnet2()
         if denoise_length is None:
             if v is None:
                 v = q
@@ -559,6 +573,7 @@ class improvedDeformableLocalCrossAttention(nn.Module):
             If perform a self-attn, just use
                 q = x, v = x, q_pos = pos, v_pos = pos
         '''
+        _require_pointnet2()
         if v is None:
             v = q
         if v_pos is None:
@@ -687,6 +702,7 @@ class improvedDeformableLocalGraphAttention(nn.Module):
             If perform a self-attn, just use
                 q = x, v = x, q_pos = pos, v_pos = pos
         '''
+        _require_pointnet2()
         if denoise_length is None:
             if v is None:
                 v = q
@@ -838,6 +854,7 @@ class DynamicGraphAttention(nn.Module):
             If perform a self-attn, just use
                 q = x, v = x, q_pos = pos, v_pos = pos
         '''
+        _require_pointnet2()
         if denoise_length is None:
             if v is None:
                 v = q
