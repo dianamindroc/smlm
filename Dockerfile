@@ -1,8 +1,8 @@
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-# keep PyTorch index consistent with cu121
-ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu121
+# keep PyTorch index consistent with cu124
+ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu124
 # must use dotted SM versions
 ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9"
 
@@ -14,11 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# install torch that matches CUDA 12.1
+# install torch that matches CUDA 12.4
 RUN python3 -m pip install --upgrade pip \
  && python3 -m pip install --no-cache-dir \
-    torch==2.3.1+cu121 torchvision==0.18.1+cu121 torchaudio==2.3.1+cu121 \
-    --index-url https://download.pytorch.org/whl/cu121
+    torch==2.4.1+cu124 torchvision==0.19.1+cu124 torchaudio==2.4.1+cu124 \
+    --index-url https://download.pytorch.org/whl/cu124
 
 WORKDIR /workspace
 COPY . /workspace

@@ -65,3 +65,6 @@ notebooks/Graph Autoencoder_files
 *.npz
 *.html
 *.ply
+
+model_architectures/diffusion_decoder.py
+scripts/train_diffusion_decoder.py

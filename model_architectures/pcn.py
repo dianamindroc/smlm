@@ -8,7 +8,6 @@ from torch.nn import functional as F
 from model_architectures.attention import EnhancedSelfAttention
 from model_architectures.adaptive_folding import AdaptiveFolding
 
-
 class PCN(nn.Module):
     """
     "PCN: Point Cloud Completion Network"
@@ -21,7 +20,7 @@ class PCN(nn.Module):
         num_coarse: 1024
     """
 
-    def __init__(self, num_dense=2048, latent_dim=1024, grid_size=2, classifier=False, num_classes=2, channels=3):
+    def __init__(self, num_dense=2048, latent_dim=1024, grid_size=2, classifier=False, num_classes=2, channels=3, decoder_type="folding"):
         super().__init__()
 
         self.num_dense = num_dense
@@ -143,21 +142,7 @@ class PCN(nn.Module):
 
         # encoder
         # feature = self.first_conv(xyz.transpose(2, 1))  # (B,  256, N)
-        feature = self.first_conv(xyz)  # (B,  256, N)
-        feature_global = torch.max(feature, dim=2, keepdim=True)[0]  # (B,  256, 1)
-        feature = torch.cat([feature_global.expand(-1, -1, N), feature], dim=1)  # (B,  512, N)
-        feature = self.second_conv(feature)  # (B, 1024, N)
-
-        # Skip connection for encoder
-        #encoder_skip = 0.1 * feature
-
-        # try out attention
-        attention_output, attn_weights = self.attention(feature)
-        feature = self.dropout(attention_output)
-        # Skip connection for attention
-        #attention_output = attention_output #+ encoder_skip
-
-        feature_global_return = torch.max(feature, dim=2, keepdim=False)[0]  # (B, 1024)
+        feature_global_return, attn_weights = self.encode_latent(xyz)
 
         # classifier
         if self.classifier:
@@ -173,7 +158,6 @@ class PCN(nn.Module):
 
         seed = self.folding_seed.unsqueeze(2).expand(B, -1, self.num_coarse, -1)  # (B, 2, num_coarse, S)
         seed = seed.reshape(B, -1, self.num_dense)  # (B, 2, num_fine)
-        # seed = self.folding_seed.expand(B, -1, self.num_dense)
         feature_global = feature_global_return.unsqueeze(2).expand(-1, -1, self.num_dense)  # (B, 1024, num_fine)
 
         # TODO: added this check if good
@@ -184,16 +168,15 @@ class PCN(nn.Module):
         # feat = torch.cat([feature_global, seed, point_feat], dim=1)  # (B, 1024+2+3, num_fine)
         folded_points = self.adaptive_folding(feature_global, seed)
         feat = torch.cat([feature_global, seed, folded_points], dim=1)
+        refinement_input = feat
 
         # Skip connection for final_conv
         #skip_out = self.skip_conv(feat)
         if self.channels == 3:
-            fine = (self.final_conv(feat) + point_feat) * self.output_scale
+            fine = (self.final_conv(refinement_input) + point_feat) * self.output_scale
         else:
-            fine = self.final_conv(feat)
-            print('size of fine is ', fine.size())
-            print('size of point_feat is ', point_feat.size())
-            fine_xyz = fine[:, :3, :] + point_feat[:, :3, :]  # (B, 3, num_fine)
+            fine = self.final_conv(refinement_input)
+            fine_xyz = fine[:, :3, :] + point_feat[:, :3, :]
             fine_sigma = fine[:, 3:, :]
             coarse_xyz = coarse[:, :, :3]
             coarse_sigma = coarse[:, :, 3:]
@@ -204,8 +187,10 @@ class PCN(nn.Module):
             else:
                 return coarse.contiguous(), fine.transpose(1, 2).contiguous(), feature_global_return, attn_weights
         else:
-            fine_xyz = fine_xyz.transpose(2, 1).contiguous()
-            fine_sigma = fine_sigma.transpose(2, 1).contiguous()
+            fine_xyz = fine[:, :3, :].transpose(2, 1).contiguous()
+            fine_sigma = fine[:, 3:, :].transpose(2, 1).contiguous()
+            coarse_xyz = coarse[:, :, :3]
+            coarse_sigma = coarse[:, :, 3:]
             if self.classifier:
                 return (coarse_xyz.contiguous(), coarse_sigma.contiguous()), (fine_xyz, fine_sigma), feature_global_return, out_classifier, attn_weights
             else:
@@ -231,3 +216,14 @@ class ImprovedClassifier(nn.Module):
 
     def forward(self, z):
         return self.classifier(z)
+        self.decoder_type = decoder_type
+    def encode_latent(self, xyz):
+        B, _, N = xyz.shape
+        feature = self.first_conv(xyz)
+        feature_global = torch.max(feature, dim=2, keepdim=True)[0]
+        feature = torch.cat([feature_global.expand(-1, -1, N), feature], dim=1)
+        feature = self.second_conv(feature)
+        attention_output, attn_weights = self.attention(feature)
+        feature = self.dropout(attention_output)
+        feature_global_return = torch.max(feature, dim=2, keepdim=False)[0]
+        return feature_global_return, attn_weights
