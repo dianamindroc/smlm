@@ -75,3 +75,109 @@ def extract_stats(stats):
         "sample_std_y": sample_std_y,
         "sample_std_z": sample_std_z
     }
+
+
+def find_top_n_smallest(arr, n):
+    if n <= 0:
+        return {"error": "n must be a positive integer"}
+
+    if len(arr) < n:
+        return {"error": f"Array has fewer than {n} elements"}
+
+    # Create indexed array
+    indexed_arr = [(value, index) for index, value in enumerate(arr)]
+
+    # Sort by value
+    indexed_arr.sort(key=lambda x: x[0])
+
+    # Get top n smallest
+    result = []
+    for i in range(n):
+        result.append({
+            "value": indexed_arr[i][0],
+            "index": indexed_arr[i][1]
+        })
+
+    return result
+
+
+def find_top_n_largest(arr, n):
+    if n <= 0:
+        return {"error": "n must be a positive integer"}
+
+    if len(arr) < n:
+        return {"error": f"Array has fewer than {n} elements"}
+
+    # Create indexed array
+    indexed_arr = [(value, index) for index, value in enumerate(arr)]
+
+    # Sort by value in descending order
+    indexed_arr.sort(key=lambda x: x[0], reverse=True)
+
+    # Get top n largest
+    result = []
+    for i in range(n):
+        result.append({
+            "value": indexed_arr[i][0],
+            "index": indexed_arr[i][1]
+        })
+
+    return result
+
+
+def find_best_errors_by_corner_group(data_dict):
+    import pandas as pd
+    import numpy as np
+    """
+    Find the best (lowest) L1 errors for each group of corners removed (0, 1, 2, etc.)
+
+    Parameters:
+    -----------
+    data_dict : dict
+        Dictionary containing 'l1_errors', 'corner_labels', and optionally 'corner_names'
+
+    Returns:
+    --------
+    dict
+        Dictionary containing best errors and their information for each corner group
+    """
+    # Extract relevant data
+    l1_errors = data_dict['l1_errors']
+    corner_labels = data_dict['corner_labels']
+
+    # Optional: extract corner names if available
+    corner_names = data_dict.get('corner_names', None)
+
+    # Create DataFrame for easier manipulation
+    df_data = {
+        'l1_error': l1_errors,
+        'corner_count': corner_labels,
+        'index': np.arange(len(l1_errors))  # Keep track of original indices
+    }
+
+    if corner_names is not None:
+        df_data['corner_description'] = corner_names
+
+    df = pd.DataFrame(df_data)
+
+    # Find best (lowest) L1 error for each corner group
+    best_indices = df.groupby('corner_count')['l1_error'].idxmin()
+    best_errors = df.loc[best_indices]
+
+    # Convert to dictionary with corner count as keys
+    result = {}
+    for corner_count, row in best_errors.iterrows():
+        result[int(corner_count)] = {
+            'l1_error': row['l1_error'],
+            'index': int(row['index'])
+        }
+        if corner_names is not None:
+            result[int(corner_count)]['description'] = row['corner_description']
+
+    # Also include summary stats for each group
+    group_stats = df.groupby('corner_count')['l1_error'].agg(['min', 'max', 'mean', 'std', 'count']).to_dict(
+        orient='index')
+    for corner_count, stats in group_stats.items():
+        result[int(corner_count)]['stats'] = stats
+
+    return result

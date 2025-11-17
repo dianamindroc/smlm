@@ -6,6 +6,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import os
+from sklearn.cluster import KMeans # DBSCAN import removed unless needed as fallback
+from sklearn.preprocessing import StandardScaler
+from sklearn.manifold import TSNE
+from sklearn.metrics import silhouette_score
+from sklearn.mixture import GaussianMixture
+from scipy.signal import find_peaks
+
+import hdbscan # <--- Import HDBSCAN
+import time
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.cm as cm
+from matplotlib.colors import Normalize
 plt.ioff()
 
 
@@ -1042,90 +1054,171 @@ def gaussian(x, a, mu, sigma):
     return a * np.exp(-(x - mu) ** 2 / (2 * sigma ** 2))
 
 
-def plot_z_histogram(point_clouds, bins=50, figsize=(10, 6), save=False, background='black'):
+def plot_z_histogram(point_clouds, nm_per_unit=1.0, bins=None, figsize=(10, 6),
+                     save=False, save_dir='.', filename='z_histogram.png',
+                     background='black', gmm=2):
     """
-    Plot a histogram of z-coordinates from one or more point clouds with a Gaussian fit.
+    Plot a histogram of z-coordinates (scaled to nm) from one or more point clouds
+    with a two-component Gaussian mixture fit.
 
     Parameters:
-    point_clouds (list): A list of numpy arrays, each of shape (n, 3) representing a point cloud
-    bins (int): Number of bins for the histogram
-    figsize (tuple): Figure size in inches
-    save (bool): Whether to save the figure as a PNG
-    background (str): 'black' or 'white', setting the background color of the plot
+    point_clouds (list): A list of numpy arrays, each shape (n, 3), representing point clouds.
+    nm_per_unit (float): Factor to convert input z-coordinates to nanometers. Defaults to 1.0.
+    bins (int, optional): Number of bins for the histogram. If None, calculated automatically.
+    figsize (tuple): Figure size in inches.
+    save (bool): Whether to save the figure.
+    save_dir (str): Directory to save the figure in. Defaults to current directory '.'.
+    filename (str): Name for the saved file. Defaults to 'z_histogram.png'.
+    background (str): 'black' or 'white', setting the plot's background color.
     """
-    from scipy.signal import find_peaks
-    from sklearn.mixture import GaussianMixture
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import os
+
+    if not isinstance(point_clouds, list):
+        print("Error: point_clouds should be a list of numpy arrays.")
+        return
+    if len(point_clouds) == 0:
+        print("Warning: Received empty list of point clouds.")
+        return
+
+    # --- 1. Apply Scaling and Aggregate Z-Data ---
+    try:
+        all_z_scaled = np.concatenate([cloud[:, 2] * nm_per_unit for cloud in point_clouds])
+    except IndexError:
+        print("Error: Input arrays must have at least 3 columns (x, y, z).")
+        return
+    except Exception as e:
+        print(f"Error processing point cloud data: {e}")
+        return
+
+    if all_z_scaled.size == 0:
+        print("Warning: No z-coordinates found in the provided point clouds.")
+        return
 
     # Set colors based on background choice
     if background == 'black':
         bg_color = 'black'
         fg_color = 'white'
-        hist_color = 'teal'
+        hist_color = 'cyan' # Adjusted for visibility on black
         fit_color = 'orange'
-        line_color = 'white'
-    else:
+        line_color = 'gray' # Lighter gray for lines on black
+        text_color = 'orange'
+    else: # Default to white background
         bg_color = 'white'
         fg_color = 'black'
-        hist_color = 'darkblue'
+        hist_color = 'cornflowerblue' # Adjusted for visibility on white
         fit_color = 'darkred'
-        line_color = 'black'
+        line_color = 'dimgray'
+        text_color = 'darkred'
 
     fig, ax = plt.subplots(figsize=figsize, facecolor=bg_color)
     ax.set_facecolor(bg_color)
 
-    all_z = np.concatenate([cloud[:, 2] for cloud in point_clouds])
+    # --- 2. Determine Bins ---
+    if bins is None:
+        bin_width_nm = 5 # Target bin width in nanometers
+        range_z = all_z_scaled.max() - all_z_scaled.min()
+        # Avoid division by zero or negative range
+        if range_z > 1e-6:
+            calculated_bins = int(np.ceil(range_z / bin_width_nm))
+            bins = max(calculated_bins, 10) # Ensure at least 10 bins
+        else:
+            bins = 10 # Default if range is very small or zero
+        print(f"Auto-calculated number of bins: {bins}")
 
-    # Plot histogram
-    counts, bins, _ = ax.hist(all_z, bins=bins, color=hist_color, alpha=0.7, density=True, label='Histogram')
+    # --- 3. Plot Histogram (Moved outside 'if bins is None') ---
+    try:
+        counts, bin_edges, _ = ax.hist(all_z_scaled, bins=bins, color=hist_color, alpha=0.7,
+                                       density=True, label='Z-Data Histogram')
+    except Exception as e:
+        print(f"Error plotting histogram: {e}")
+        plt.close(fig) # Close the figure if histogram fails
+        return
 
-    # Fit two-Gaussian mixture
-    gm = GaussianMixture(n_components=2, random_state=0).fit(all_z.reshape(-1, 1))
+    # --- 4. Fit and Plot Two-Gaussian Mixture ---
+    try:
+        # Reshape data for GaussianMixture
+        data_for_fit = all_z_scaled.reshape(-1, 1)
 
-    # Generate points for plotting the mixture
-    x_fit = np.linspace(bins.min(), bins.max(), 1000).reshape(-1, 1)
-    y_fit = np.exp(gm.score_samples(x_fit))
+        # Fit GMM only if there's enough variance
+        if np.std(data_for_fit) > 1e-6:
+            gm = GaussianMixture(n_components=gmm, random_state=0, covariance_type='full').fit(data_for_fit)
 
-    # Plot Gaussian mixture fit
-    ax.plot(x_fit, y_fit, color=fit_color, linewidth=2, label='Gaussian mixture fit')
+            # Generate points for plotting the mixture curve
+            x_fit = np.linspace(bin_edges.min(), bin_edges.max(), 1000).reshape(-1, 1)
+            log_prob = gm.score_samples(x_fit)
+            y_fit = np.exp(log_prob) # Convert log probability to probability density
 
-    # Customize plot
-    ax.set_xlabel('z axis', color=fg_color)
-    ax.set_ylabel('Counts', color=fg_color)
+            # Plot Gaussian mixture fit
+            ax.plot(x_fit, y_fit, color=fit_color, linewidth=2, label='Gaussian Mixture Fit')
+
+            # --- 5. Find and Annotate Peaks in the Fitted Mixture ---
+            peaks, properties = find_peaks(y_fit.flatten(), height=max(y_fit) / 3, distance=len(x_fit) // 10)
+            peak_x = x_fit[peaks].flatten()
+
+            if len(peak_x) > 1:
+                # Sort peaks (left to right)
+                sorted_peaks = np.sort(peak_x)
+                left_peak = sorted_peaks[0]
+
+                # Plot vertical lines for all peaks
+                for px in sorted_peaks:
+                    ax.axvline(px, color=line_color, linestyle='--', alpha=0.6)
+
+                # Annotate distances from left peak to all right-side peaks
+                for i, right_peak in enumerate(sorted_peaks[1:]):
+                    distance = abs(right_peak - left_peak)
+                    mid_x = (left_peak + right_peak) / 2
+                    y_text = max(y_fit) * (0.9 - i * 0.07)  # Stagger vertically
+
+                    ax.text(mid_x, y_text, f'{distance:.1f} nm',
+                            color=text_color, fontsize=9, ha='center',
+                            bbox=dict(boxstyle='round,pad=0.2', fc=bg_color, alpha=0.5, ec='none'))
+
+            elif len(peak_x) == 1:
+                # Only one peak, label it
+                ax.axvline(peak_x[0], color=line_color, linestyle='--', alpha=0.6,
+                           label=f'Fit Peak: {peak_x[0]:.1f} nm')
+            # else: more than 2 peaks found, don't annotate distance simply
+
+        else:
+            print("Warning: Data has near-zero variance. Skipping Gaussian Mixture Fit.")
+
+    except Exception as e:
+        print(f"Error during Gaussian Mixture fitting or peak finding: {e}")
+        # Continue to show histogram even if fit fails
+
+    # --- 6. Customize Plot ---
+    ax.set_xlabel(f'Z-coordinate (nm)', color=fg_color) # Use scaled units
+    ax.set_ylabel('Density', color=fg_color) # Y-axis is density due to density=True in hist
     ax.tick_params(axis='x', colors=fg_color)
     ax.tick_params(axis='y', colors=fg_color)
-    for spine in ax.spines.values():
-        spine.set_color(fg_color)
+    ax.spines['top'].set_color(fg_color)
+    ax.spines['bottom'].set_color(fg_color)
+    ax.spines['left'].set_color(fg_color)
+    ax.spines['right'].set_color(fg_color)
+    ax.grid(True, color=line_color, linestyle=':', linewidth=0.5, alpha=0.5) # Add subtle grid
 
     # Add legend
-    ax.legend(facecolor=bg_color, edgecolor=fg_color, labelcolor=fg_color)
+    legend = ax.legend(facecolor=bg_color, edgecolor=fg_color, labelcolor=fg_color, fontsize=9)
+    for text in legend.get_texts():
+        text.set_color(fg_color)
 
-    # Find peaks in the fitted mixture
-    peaks, _ = find_peaks(y_fit.flatten(), height=max(y_fit) / 4, distance=len(x_fit) // 10)
-    peak_x = x_fit[peaks].flatten()
-
-    # Add text for peak distance if there are two distinct peaks
-    if len(peak_x) == 2:
-        peak_distance = abs(peak_x[1] - peak_x[0])
-        ax.text(0.7, 0.95, f'~{peak_distance:.0f}', transform=ax.transAxes,
-                color=fit_color, verticalalignment='top')
-
-        # Add vertical lines at peak positions
-        for px in peak_x:
-            ax.axvline(px, color=line_color, linestyle='--', alpha=0.5)
-
-    plt.title('Histogram of z-coordinates', color=fg_color)
+    plt.title('Histogram and Gaussian Fit of Z-coordinates', color=fg_color)
     plt.tight_layout()
 
+    # --- 7. Save Figure ---
     if save:
-        directory = '/home/dim26fa/graphics/smlms/'
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-        plt.savefig(os.path.join(directory, 'histogram' + '.png'), dpi=300, bbox_inches='tight')
-    plt.show()
+        try:
+            # Use the provided save_dir parameter
+            if not os.path.exists(save_dir):
+                print(f"Creating save directory: {save_dir}")
+                os.makedirs(save_dir)
+            save_filepath = os.path.join(save_dir, filename)
+            plt.savefig(save_filepath, dpi=300, bbox_inches='tight', facecolor=bg_color)
+            print(f"Figure saved to: {save_filepath}")
+        except Exception as e:
+            print(f"Error saving figure: {e}")
 
+    plt.show()
 
 def hist_projections_with_model(point_cloud, model_structure, grid_size=0.01, cmap='hot', title=None, save=False,
                                 background='black'):
@@ -1234,6 +1327,102 @@ def hist_projections_with_model(point_cloud, model_structure, grid_size=0.01, cm
 
     plt.show()
 
+
+def plot_axis_histogram(point_clouds, axis='z', bins=50, figsize=(10, 6), save=False, background='black'):
+    """
+    Plot a histogram of x, y, or z-coordinates from one or more point clouds with a Gaussian fit.
+
+    Parameters:
+    point_clouds (list): A list of numpy arrays, each of shape (n, 3) representing a point cloud
+    axis (str): Which axis to plot - 'x', 'y', or 'z'
+    bins (int): Number of bins for the histogram
+    figsize (tuple): Figure size in inches
+    save (bool): Whether to save the figure as a PNG
+    background (str): 'black' or 'white', setting the background color of the plot
+    """
+    from scipy.signal import find_peaks
+    from sklearn.mixture import GaussianMixture
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import os
+
+    # Validate axis parameter
+    if axis not in ['x', 'y', 'z']:
+        raise ValueError("axis must be one of 'x', 'y', or 'z'")
+
+    # Convert axis to index (x=0, y=1, z=2)
+    axis_index = {'x': 0, 'y': 1, 'z': 2}[axis]
+
+    # Set colors based on background choice
+    if background == 'black':
+        bg_color = 'black'
+        fg_color = 'white'
+        hist_color = 'teal'
+        fit_color = 'orange'
+        line_color = 'white'
+    else:
+        bg_color = 'white'
+        fg_color = 'black'
+        hist_color = 'darkblue'
+        fit_color = 'darkred'
+        line_color = 'black'
+
+    fig, ax = plt.subplots(figsize=figsize, facecolor=bg_color)
+    ax.set_facecolor(bg_color)
+
+    # Extract coordinates for the selected axis
+    all_coords = np.concatenate([cloud[:, axis_index] for cloud in point_clouds])
+
+    # Plot histogram
+    counts, bins, _ = ax.hist(all_coords, bins=bins, color=hist_color, alpha=0.7, density=True, label='Histogram')
+
+    # Fit two-Gaussian mixture
+    gm = GaussianMixture(n_components=2, random_state=0).fit(all_coords.reshape(-1, 1))
+
+    # Generate points for plotting the mixture
+    x_fit = np.linspace(bins.min(), bins.max(), 1000).reshape(-1, 1)
+    y_fit = np.exp(gm.score_samples(x_fit))
+
+    # Plot Gaussian mixture fit
+    ax.plot(x_fit, y_fit, color=fit_color, linewidth=2, label='Gaussian mixture fit')
+
+    # Customize plot
+    ax.set_xlabel(f'{axis} axis', color=fg_color)
+    ax.set_ylabel('Counts', color=fg_color)
+    ax.tick_params(axis='x', colors=fg_color)
+    ax.tick_params(axis='y', colors=fg_color)
+
+    for spine in ax.spines.values():
+        spine.set_color(fg_color)
+
+    # Add legend
+    ax.legend(facecolor=bg_color, edgecolor=fg_color, labelcolor=fg_color)
+
+    # Find peaks in the fitted mixture
+    peaks, _ = find_peaks(y_fit.flatten(), height=max(y_fit) / 4, distance=len(x_fit) // 10)
+    peak_x = x_fit[peaks].flatten()
+
+    # Add vertical lines at peak positions
+    if len(peak_x) == 2:
+        peak_distance = abs(peak_x[1] - peak_x[0]) * 100
+        #ax.text(0.7, 0.95, f'Distance: {peak_distance:.1f} nm', transform=ax.transAxes,
+        #        color=fit_color, verticalalignment='top')
+
+        for px in peak_x:
+            ax.axvline(px, color=line_color, linestyle='--', alpha=0.5)
+
+    plt.title(f'Histogram of {axis}-coordinates', color=fg_color)
+    plt.tight_layout()
+
+    if save:
+        directory = '/home/dim26fa/graphics/smlms/'
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        plt.savefig(os.path.join(directory, f'{axis}_histogram.png'), dpi=300, bbox_inches='tight')
+
+    plt.show()
+    # Return peak positions for further analysis if needed
+    return peak_x if len(peak_x) > 0 else None
 
 def hist_projections_with_model_and_centroid(point_cloud, model_structure, cluster_size=5, min_samples=20, grid_size=0.01, sigma=1, cmap='hot', title=None, save=False, background='black'):
     """
@@ -1520,3 +1709,281 @@ def calculate_adaptive_tetrahedron_distances(cloud1, cloud2):
                     best_matching = list(zip(perm, smaller_cloud, distances))
 
     return best_matching, min_total_distance
+
+
+def visualize_global_attention_distribution(point_cloud, attention_matrix, aggregate='max'):
+    """
+    Visualize the global attention distribution across the point cloud.
+
+    Args:
+        point_cloud: numpy array of shape [N, 3] containing 3D point coordinates
+        attention_matrix: numpy array of shape [N, N] containing attention weights
+        aggregate: how to aggregate attention scores ('max', 'sum', 'mean')
+    """
+    # Convert to numpy if tensors
+    if isinstance(point_cloud, torch.Tensor):
+        point_cloud = point_cloud.detach().cpu().numpy()
+    if isinstance(attention_matrix, torch.Tensor):
+        attention_matrix = attention_matrix.detach().cpu().numpy()
+
+    # Handle batched attention matrix
+    if attention_matrix.ndim == 3 and attention_matrix.shape[0] == 1:
+        attention_matrix = attention_matrix[0]  # Remove batch dimension
+
+    # Aggregate attention weights
+    if aggregate == 'max':
+        # Maximum attention received by each point
+        point_importance = attention_matrix.max(axis=0)
+    elif aggregate == 'sum':
+        # Sum of attention received by each point
+        point_importance = attention_matrix.sum(axis=0)
+    elif aggregate == 'mean':
+        # Average attention received by each point
+        point_importance = attention_matrix.mean(axis=0)
+    else:
+        raise ValueError(f"Unknown aggregation method: {aggregate}")
+
+    # Create figure
+    fig = plt.figure(figsize=(12, 10))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Plot all points with importance-based colors and sizes
+    scatter = ax.scatter(
+        point_cloud[:, 0],
+        point_cloud[:, 1],
+        point_cloud[:, 2],
+        c=point_importance,
+        cmap='plasma',
+        s=50 * (point_importance / point_importance.max()) + 10,  # Size based on importance
+        alpha=0.8
+    )
+
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax, pad=0.1)
+    cbar.set_label(f'{aggregate.capitalize()} Attention', fontsize=12)
+
+    # Set labels and title
+    ax.set_xlabel('X', fontsize=12)
+    ax.set_ylabel('Y', fontsize=12)
+    ax.set_zlabel('Z', fontsize=12)
+    ax.set_title(f'Global Attention Distribution ({aggregate.capitalize()})', fontsize=14)
+
+    # Improve 3D view
+    ax.view_init(elev=30, azim=45)
+
+    plt.tight_layout()
+
+    return fig
+
+
+def plot_attention(pc, attn, save_to=None):
+    attn_norm = (attn - np.min(attn)) / (np.max(attn) - np.min(attn))
+
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+
+    # XY Projection
+    sc1 = axs[0].scatter(pc[:, 0], pc[:, 1], c=attn_norm, cmap='viridis', alpha=0.5)
+    axs[0].set_title('XY Projection')
+    axs[0].set_xlabel('X')
+    axs[0].set_ylabel('Y')
+    fig.colorbar(sc1, ax=axs[0], label='Attention Weight')
+
+    # XZ Projection
+    sc2 = axs[1].scatter(pc[:, 0], pc[:, 2], c=attn_norm, cmap='viridis', alpha=0.5)
+    axs[1].set_title('XZ Projection')
+    axs[1].set_xlabel('X')
+    axs[1].set_ylabel('Z')
+    fig.colorbar(sc2, ax=axs[1], label='Attention Weight')
+
+    plt.tight_layout()
+    if save_to is not None:
+        plt.savefig(save_to, dpi=600)
+    plt.show()
+
+
+def plot_clusters(embedding, labels, title, filename=None):
+    """Generates and optionally saves a scatter plot of the clusters based on embedding."""
+    unique_labels = np.unique(labels)
+    # Calculate number of clusters, excluding noise label -1 if present
+    n_clusters_ = len(unique_labels) - (1 if -1 in labels else 0)
+    n_noise_ = list(labels).count(-1)
+
+    print(f"\nPlotting results...")
+    print(f"  Estimated number of clusters: {n_clusters_}")
+    if n_noise_ > 0:
+        print(f"  Estimated number of noise points: {n_noise_}")
+
+    plt.figure(figsize=(10, 8))
+    # Handle plotting potentially including noise points (-1)
+    if -1 in unique_labels: # Check for noise points
+        core_samples_mask = (labels != -1)
+        # Ensure n_clusters_ is at least 1 for linspace if only noise exists
+        n_colors = max(1, n_clusters_)
+        colors = plt.cm.viridis(np.linspace(0, 1, n_colors))
+        # Plot core samples (non-noise)
+        if np.any(core_samples_mask):
+            plt.scatter(embedding[core_samples_mask, 0], embedding[core_samples_mask, 1],
+                        c=labels[core_samples_mask], cmap=plt.cm.viridis, s=5, alpha=0.7)
+        # Plot noise samples
+        noise_mask = (labels == -1)
+        if np.any(noise_mask):
+             plt.scatter(embedding[noise_mask, 0], embedding[noise_mask, 1],
+                         c='gray', marker='x', s=10, alpha=0.5, label='Noise')
+             plt.legend() # Show legend only if noise exists
+    else: # No noise points
+        plt.scatter(embedding[:, 0], embedding[:, 1], c=labels,
+                    cmap=plt.cm.viridis, s=5, alpha=0.7)
+
+    plt.title(title)
+    plt.xlabel("t-SNE Dimension 1")
+    plt.ylabel("t-SNE Dimension 2")
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.colorbar(label='Cluster ID')
+
+    if filename:
+        try:
+            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            print(f"  Plot saved to {filename}")
+        except Exception as e:
+            print(f"  Error saving plot: {e}")
+    plt.show()
+
+
+# --- Main Clustering and Visualization Function ---
+def cluster_and_visualize_features(features, clustering_method='kmeans', n_clusters=5,
+    # HDBSCAN params
+    hdbscan_min_cluster_size=5, # <--- HDBSCAN primary parameter
+    hdbscan_min_samples=None,    # <--- HDBSCAN secondary parameter (often optional)
+    hdbscan_metric='euclidean',  # <--- HDBSCAN distance metric
+    # General params
+    scale_features=True,
+    tsne_perplexity=30.0,
+    tsne_n_iter=1000,
+    tsne_learning_rate='auto',
+    tsne_init='pca',
+    output_label_file=None,
+    output_plot_file=None,
+    random_state=42
+    ):
+    """
+    Performs clustering and t-SNE visualization on feature vectors.
+
+    Args:
+        features (np.ndarray): Input feature vectors (samples, features).
+        clustering_method (str): 'kmeans' or 'hdbscan'.
+        n_clusters (int): Number of clusters for KMeans.
+        hdbscan_min_cluster_size (int): Minimum cluster size for HDBSCAN.
+        hdbscan_min_samples (int, optional): Minimum samples parameter for HDBSCAN. Defaults to None (uses min_cluster_size).
+        hdbscan_metric (str): Distance metric for HDBSCAN.
+        scale_features (bool): Whether to scale features using StandardScaler.
+        tsne_perplexity (float): Perplexity parameter for t-SNE.
+        tsne_n_iter (int): Number of iterations for t-SNE.
+        tsne_learning_rate (str or float): Learning rate for t-SNE.
+        tsne_init (str): Initialization method for t-SNE ('pca' or 'random').
+        output_label_file (str, optional): Path to save cluster labels (.npy). Defaults to None.
+        output_plot_file (str, optional): Path to save the plot image. Defaults to None.
+        random_state (int, optional): Random state for reproducibility (affects t-SNE, KMeans). Defaults to 42.
+
+    Returns:
+        tuple: (cluster_labels (np.ndarray), embedding (np.ndarray))
+               Returns the calculated cluster labels and the 2D t-SNE embedding.
+    """
+    print("--- Starting Clustering and Visualization ---")
+    # 1. Validate Input Features
+    if not isinstance(features, np.ndarray) or features.ndim != 2:
+        raise ValueError("Input 'features' must be a 2D NumPy array (samples, features).")
+    print(f"Processing {features.shape[0]} samples with {features.shape[1]} features each.")
+
+    # 2. Scale Features (Optional but Recommended)
+    if scale_features:
+        print("Scaling features using StandardScaler...")
+        scaler = StandardScaler()
+        features_scaled = scaler.fit_transform(features)
+    else:
+        features_scaled = features # Use original features if not scaling
+
+    # 3. Dimensionality Reduction using t-SNE (for visualization)
+    print(f"Reducing dimensionality using t-SNE (perplexity={tsne_perplexity}, n_iter={tsne_n_iter})...")
+    print("(t-SNE can take some time on large datasets)")
+    start_time = time.time()
+    tsne = TSNE(
+        n_components=2,
+        perplexity=tsne_perplexity,
+        n_iter=tsne_n_iter,
+        learning_rate=tsne_learning_rate,
+        init=tsne_init,
+        random_state=random_state,
+        n_jobs=-1
+    )
+    embedding = tsne.fit_transform(features_scaled)
+    end_time = time.time()
+    print(f"t-SNE completed in {end_time - start_time:.2f} seconds.")
+    print(f"t-SNE embedding shape: {embedding.shape}")
+
+    # 4. Clustering
+    cluster_labels = None
+    plot_title_suffix = "t-SNE Projection"
+    print(f"Performing {clustering_method.upper()} clustering...")
+
+    # --- Clustering Method Logic ---
+    if clustering_method.lower() == 'kmeans':
+        if n_clusters <= 0:
+             raise ValueError("n_clusters must be positive for KMeans.")
+        print(f"  Parameters: k={n_clusters}")
+        kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
+        cluster_labels = kmeans.fit_predict(features_scaled)
+        plot_title = f'KMeans Clustering (k={n_clusters}) - {plot_title_suffix}'
+        # Optional: Calculate Silhouette Score
+        try:
+            if n_clusters > 1 and features_scaled.shape[0] > n_clusters:
+                 # Note: Silhouette score is less meaningful for non-convex clusters like those HDBSCAN finds
+                 score = silhouette_score(features_scaled, cluster_labels, metric='euclidean')
+                 print(f"  Silhouette Score: {score:.3f} (higher is better, range [-1, 1])")
+            else:
+                 print("  Cannot calculate Silhouette Score (need k > 1 and n_samples > k).")
+        except ValueError as e:
+             print(f"  Could not calculate Silhouette Score: {e}")
+
+    elif clustering_method.lower() == 'hdbscan': # <--- HDBSCAN Logic
+        print(f"  Parameters: min_cluster_size={hdbscan_min_cluster_size}, min_samples={hdbscan_min_samples}, metric='{hdbscan_metric}'")
+        clusterer = hdbscan.HDBSCAN(
+            min_cluster_size=hdbscan_min_cluster_size,
+            min_samples=hdbscan_min_samples, # If None, defaults to min_cluster_size
+            metric=hdbscan_metric,
+            # core_dist_n_jobs=-1, # Use all cores for distance calculation if needed (can consume memory)
+            gen_min_span_tree=False # Set to True if you need the tree object, False for faster prediction
+        )
+        cluster_labels = clusterer.fit_predict(features_scaled)
+        plot_title = f'HDBSCAN Clustering (min_cluster_size={hdbscan_min_cluster_size}) - {plot_title_suffix}'
+        # Note: Silhouette Score is generally NOT a good metric for HDBSCAN results
+        # as it favors convex clusters. We won't calculate it here.
+
+    else:
+        raise ValueError(f"Unknown clustering_method: '{clustering_method}'. Choose 'kmeans' or 'hdbscan'.")
+    # --- End Clustering Method Logic ---
+
+
+    # 5. Analyze Results
+    print("\nCluster analysis results:")
+    unique, counts = np.unique(cluster_labels, return_counts=True)
+    cluster_summary = dict(zip(unique, counts))
+    for label, count in cluster_summary.items():
+        if label == -1:
+            print(f"  - Noise points: {count}")
+        else:
+            print(f"  - Cluster {label}: {count} samples")
+
+    # 6. Plotting (using the helper function)
+    plot_clusters(embedding, cluster_labels, plot_title, output_plot_file)
+
+    # 7. Save Labels (Optional)
+    if output_label_file:
+        print(f"\nSaving cluster labels to {output_label_file}...")
+        try:
+            np.save(output_label_file, cluster_labels)
+            print("  Labels saved successfully.")
+        except Exception as e:
+            print(f"  Error saving labels: {e}")
+
+    print("--- Clustering and Visualization Finished ---")
+    return cluster_labels, embedding

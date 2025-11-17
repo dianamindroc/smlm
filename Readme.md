@@ -15,6 +15,13 @@ Using mamba package manager, one can create a new environment for this repositor
 `pip install .` in the smlm folder 
 
 For installing Chamfer distance and pointnet2_ops: 
+`git clone https://github.com/qinglew/PCN-PyTorch`
+`cd PCN-PyTorch/extensions/chamfer`
+`pip install .`
+
+`git clone https://github.com/fishbotics/pointnet2_ops.git`
+`cd pointnet2_ops`
+`pip install .`
 
 1. Clone the original PCN repository (contains the custom CUDA ops that this project reuses):
    ```

@@ -167,3 +167,18 @@ def get_files_list(root_folder):
                 full_filename = f"{parent_folder_name}/{filename_without_suffix}"
                 # Write each full filename to the text file, followed by a newline
                 file.write(full_filename + '\n')
+
+
+def get_bounding_box_size(point_cloud):
+    import numpy as np
+    import pandas as pd
+    #check if point cloud is array or df
+    if isinstance(point_cloud, pd.DataFrame):
+        min_values = point_cloud.min()
+        max_values = point_cloud.max()
+    if isinstance(point_cloud, np.ndarray):
+        min_values = point_cloud.min(axis=0)
+        max_values = point_cloud.max(axis=0)
+    bounding_box_size = (max_values - min_values)
+    return bounding_box_size
+

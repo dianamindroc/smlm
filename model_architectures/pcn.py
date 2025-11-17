@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from model_architectures.attention import EnhancedSelfAttention
+from model_architectures.attention import EnhancedSelfAttention, RotationInvariantAttention
 from model_architectures.adaptive_folding import AdaptiveFolding
 
 class PCN(nn.Module):
@@ -112,7 +112,7 @@ class PCN(nn.Module):
         #grid = torch.stack([grid_x, grid_y], dim=-1).reshape(1, -1, 2)
         #self.folding_seed = grid.transpose(1, 2).cuda()
 
-        self.output_scale = nn.Parameter(torch.tensor([1.2]), requires_grad=True)
+        self.output_scale = nn.Parameter(torch.ones(channels), requires_grad=True)
 
         if self.classifier:
             #self.classifiernet = ImprovedClassifier(self.latent_dim, self.num_classes)
@@ -142,7 +142,22 @@ class PCN(nn.Module):
 
         # encoder
         # feature = self.first_conv(xyz.transpose(2, 1))  # (B,  256, N)
-        feature_global_return, attn_weights = self.encode_latent(xyz)
+        feature = self.first_conv(xyz)  # (B,  256, N)
+        feature_global = torch.max(feature, dim=2, keepdim=True)[0]  # (B,  256, 1)
+        feature = torch.cat([feature_global.expand(-1, -1, N), feature], dim=1)  # (B,  512, N)
+        feature = self.second_conv(feature)  # (B, 1024, N)
+
+        # Skip connection for encoder
+        #encoder_skip = 0.1 * feature
+
+        # try out attention
+        attention_output, attn_weights = self.attention(feature)
+        feature = self.dropout(attention_output)
+        # Skip connection for attention
+        #attention_output = attention_output #+ encoder_skip
+
+        #feature_global_return = torch.max(feature, dim=2, keepdim=False)[0]
+        feature_global_return = torch.mean(feature, dim=2, keepdim=False) # (B, 1024)
 
         # classifier
         if self.classifier:
@@ -173,7 +188,7 @@ class PCN(nn.Module):
         # Skip connection for final_conv
         #skip_out = self.skip_conv(feat)
         if self.channels == 3:
-            fine = (self.final_conv(refinement_input) + point_feat) * self.output_scale
+            fine = self.final_conv(feat) + point_feat #* self.output_scale.view(1, -1, 1)
         else:
             fine = self.final_conv(refinement_input)
             fine_xyz = fine[:, :3, :] + point_feat[:, :3, :]

@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-
+import numpy as np
 
 class Reader:
     """
@@ -257,12 +257,14 @@ def read_by_sample(path, sample):
     gt = next((read_pc(s) for s in samples if 'gt' in s), None)
     inputt = next((read_pc(s) for s in samples if 'input' in s), None)
     output = next((read_pc(s) for s in samples if 'output' in s), None)
+    attn = next((np.load(s)[0] for s in samples if 'attn' in s), None)
     return {'gt':gt,
             'input':inputt,
             'output':output,
             'gtdf': pd.DataFrame(gt, columns=['x', 'y', 'z']),
             'inputdf': pd.DataFrame(inputt, columns=['x', 'y', 'z']),
-            'outputdf':pd.DataFrame(output, columns=['x', 'y', 'z'])}
+            'outputdf':pd.DataFrame(output, columns=['x', 'y', 'z']),
+            'attn':np.array(attn)}
 
 
 def read_pts_file(file_path):

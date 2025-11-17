@@ -12,7 +12,8 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import matplotlib
 from joblib import dump
-from scipy.spatial.transform import Rotation as R
+import pickle
+
 
 try:
     import wandb  # type: ignore
@@ -94,7 +95,8 @@ def train(config, exp_name=None, fixed_alpha=None):
         'grid_size': config.train.grid_size,
         'min_lr': config.train.min_lr,
         'latent_dim': config.train.latent_dim,
-        'num_dense': config.train.num_dense
+        'num_dense': config.train.num_dense,
+        'beta': config.train.beta,
     }
     log_dir = create_log_folder(config.train.log_dir, config.model)
     print('Loading Data...')
@@ -152,6 +154,19 @@ def train(config, exp_name=None, fixed_alpha=None):
                                                    num_workers=train_config['num_workers'])
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=train_config['batch_size'], shuffle=False,
                                                  num_workers=train_config['num_workers'])
+    train_iso_paths = []
+    val_iso_paths = []
+    for i in range(len(val_dataset)):
+        sample = val_dataset[i]
+        val_iso_paths.append(sample['iso_path'])
+    with open(os.path.join(log_dir, 'validation_iso_paths.pkl'), 'wb') as f:
+        pickle.dump(val_iso_paths, f)
+    for i in range(len(train_dataset)):
+        sample = train_dataset[i]
+        train_iso_paths.append(sample['iso_path'])
+    with open(os.path.join(log_dir, 'train_iso_paths.pkl'), 'wb') as f:
+        pickle.dump(train_iso_paths, f)
+
     print("Dataset loaded!")
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -369,6 +384,27 @@ def train(config, exp_name=None, fixed_alpha=None):
                 # loss1 = losses.cd_loss_l1(rotated_reconstructions, c)
                 # loss2 = losses.cd_loss_l1(rotated_reconstructions, c)
                 loss = loss1 + alpha * loss2
+                wandb.log({'coarse_loss': loss1 * 1e3})
+                wandb.log({'dense_loss': loss2 * 1e3})
+                wandb.log({'reconstruction_loss_only': loss.item() * 1e3})  # Log combined CD loss
+                try:
+                    scale_pred = losses.calculate_scale(dense_pred.contiguous())
+                    scale_gt = losses.calculate_scale(c.contiguous())  # Make sure c has the right shape
+
+                    # Calculate the scale loss (e.g., Mean Squared Error between scales)
+                    scale_loss = torch.mean((scale_pred - scale_gt) ** 2)
+                    # Alternatively, use Mean Absolute Error: scale_loss = torch.mean(torch.abs(scale_pred - scale_gt))
+
+                except ValueError as e:
+                    print(f"Error calculating scale loss: {e}")
+                    print(f"dense_pred shape: {dense_pred.shape}, c shape: {c.shape}")
+                    scale_loss = torch.tensor(0.0,
+                                              device=dense_pred.device)  # Assign zero loss if shapes mismatch to avoid crashing
+
+                beta = train_config['beta']
+                scaled_loss = loss + beta * scale_loss
+                wandb.log({'scale_loss': scale_loss.item() * 1e3})
+                wandb.log({'total_train_loss': scaled_loss.item() * 1e3})
                 wandb_log({'coarse_loss': loss1 * 1e3})
                 wandb_log({'dense_loss': loss2 * 1e3})
 
@@ -382,6 +418,7 @@ def train(config, exp_name=None, fixed_alpha=None):
 
             # back propagation
             loss.backward()
+            #scaled_loss.backward()
             optimizer_recon.step()
             train_step += 1
 
@@ -399,9 +436,14 @@ def train(config, exp_name=None, fixed_alpha=None):
         #export_ply(os.path.join(log_dir, '{:03d}.ply'.format(i)), np.transpose(dense_pred[0].detach().cpu().numpy(), (1,0)))
         #lr_schedual.step()
 
+        total_reconstruction_loss_val = 0.0
+        total_scale_loss_val = 0.0
+        total_combined_loss_val = 0.0
+
         # evaluation
         model.eval()
         total_cd_l1 = 0.0
+        total_scaled_l1 = 0.0
         labels_list = []
         corner_label_list = []
         corner_name_list = []
@@ -473,6 +515,27 @@ def train(config, exp_name=None, fixed_alpha=None):
                 total_cd_l1 += cd_loss
                 mlp_loss = losses.mlp_loss_function(label, out_classifier)
 
+                ## Modify from here
+
+                loss1_val_tensor = losses.cd_loss_l1(coarse_pred, c)  # Coarse loss tensor
+                loss2_val_tensor = losses.cd_loss_l1(dense_pred, c)  # Dense loss tensor
+
+                reconstruction_loss_val_tensor = loss1_val_tensor + alpha * loss2_val_tensor
+
+                # 2. Calculate Scale Loss component (as tensor)
+                try:
+                    scale_pred_val = losses.calculate_scale(dense_pred.contiguous())
+                    scale_gt_val = losses.calculate_scale(c.contiguous())
+                    scale_loss_val_tensor = torch.mean((scale_pred_val - scale_gt_val) ** 2)
+                except ValueError as e:
+                    print(f"Error calculating scale loss in validation: {e}")
+                    scale_loss_val_tensor = torch.tensor(0.0, device=dense_pred.device)
+
+                total_loss_val_tensor = reconstruction_loss_val_tensor + beta * scale_loss_val_tensor
+                total_reconstruction_loss_val += reconstruction_loss_val_tensor.item()
+                total_scale_loss_val += scale_loss_val_tensor.item()
+                total_combined_loss_val += total_loss_val_tensor.item()
+
                 if i == rand_iter and should_export:
                     max_index = len(filenames_iso) if filenames_iso else len(c)
                     j = random.randint(0, max_index - 1)
@@ -511,6 +574,7 @@ def train(config, exp_name=None, fixed_alpha=None):
             min_lr = train_config['min_lr']  # This allows 4 zeros after the decimal point, but not 5
 
             total_cd_l1 /= len(val_dataset)
+            total_combined_loss_val /= len(val_dataset)
             if train_config['scheduler_type'] != 'None':
                 if train_config['scheduler_type'] == 'StepLR':
                     scheduler_recon.step()
@@ -559,10 +623,24 @@ def train(config, exp_name=None, fixed_alpha=None):
             wandb_log({'val_l1_cd': total_cd_l1 * 1e3})
             wandb_log({'mlp_loss': mlp_loss * 1e3})
 
+            feature_array = np.vstack(feature_space)
+            labels_array = np.concatenate(labels_list)
+            corner_array = np.concatenate(corner_label_list)
+            labels_names = np.concatenate(labels_names)
+            corner_name = np.concatenate(corner_name)
+            plot_tsne(feature_array, labels_array, labels_names, epoch, log_dir)
+            plot_tsne(feature_array, corner_array, corner_name, 111, log_dir)
+            pca = plot_pca(feature_array, labels_array, labels_names, epoch, log_dir)
+            save_pca_model(pca, log_dir, epoch)
+            wandb.log({'val_l1_cd': total_cd_l1 * 1e3})
+            wandb.log({'mlp_loss': mlp_loss * 1e3})
+            wandb.log({'val_scaled_cd': total_combined_loss_val * 1e3})
+
         if total_cd_l1 < best_cd_l1:
             best_epoch_l1 = epoch
             best_cd_l1 = total_cd_l1
             torch.save(model.state_dict(), os.path.join(log_dir, 'best_l1_cd.pth'))
+            np.save(os.path.join(log_dir, f'{epoch:03d}_feature_array.npy'), feature_array)
             early_stop_counter = 0
         else:
             early_stop_counter += 1
@@ -675,11 +753,11 @@ def plot_pca(features, labels, labels_names, epoch, log_dir, pca=None, max_sampl
 
 
 def adjust_alpha(epoch):
-    if epoch < 120:
-        alpha = 0.001  # was 0.01
-    elif epoch < 200:
+    if epoch < 120: # was 120
+        alpha = 0.001  # was 0.01, 0.001
+    elif epoch < 200: # was 200
         alpha = 0.005  # was 0.1, 0.02
-    elif epoch < 300:
+    elif epoch < 300: #was 300
         alpha = 0.01  # was 0.5, 0.05
     else:
         alpha = 0.02  # was 1, 0.1

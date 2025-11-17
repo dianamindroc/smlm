@@ -14,9 +14,17 @@ class PCNDecoderOnly(nn.Module):
         self.latent_dim = latent_dim
         self.grid_size = grid_size
 
-        assert self.num_dense % self.grid_size ** 2 == 0
+        grid_patch = self.grid_size ** 2
 
-        self.num_coarse = self.num_dense // (self.grid_size ** 2)
+        # Adjust num_dense to be divisible by grid_size^2
+        if self.num_dense % grid_patch != 0:
+            original_num_dense = self.num_dense
+            self.num_dense = ((self.num_dense // grid_patch) + 1) * grid_patch
+            print(
+                f"[INFO] Adjusted num_dense from {original_num_dense} to {self.num_dense} to match folding grid size ({self.grid_size}x{self.grid_size})")
+
+        self.num_coarse = self.num_dense // grid_patch
+
 
         # Copy the decoder parts from the original PCN model
         self.mlp = original_model.mlp

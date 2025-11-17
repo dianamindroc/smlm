@@ -11,7 +11,7 @@ tqdm>=4.65.0
 requests>=2.29.0
 pyyaml>=6.0
 protobuf>=4.23.2
-hbscan>=0.8.33
+hdbscan>=0.8.33
 
 # PyTorch3D & Chamfer Distance
 # chamferdist>=1.0.0

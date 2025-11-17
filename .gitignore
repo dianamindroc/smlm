@@ -10,6 +10,7 @@ __pycache__
 
 *.egg-info/
 *.egg
+*.png
 build/
 dist/
 data/
@@ -32,6 +33,8 @@ scripts/quick_read.py
 scripts/scraps.py
 scripts/test_gpu.py
 scripts/get_wandb_info.py
+scripts/particle_averaging.py
+scripts/train_avg_attention.py
 
 dataset/SMLMSimulatorStats.py
 

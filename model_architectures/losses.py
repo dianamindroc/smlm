@@ -386,3 +386,16 @@ class GMMLoss(nn.Module):
         nll = -torch.logsumexp(log_probs, dim=1)
 
         return nll.mean()
+
+def calculate_scale(point_cloud_batch):
+    # Ensure working with (B, N, C)
+    if point_cloud_batch.dim() == 3 and point_cloud_batch.shape[1] == 3: # Check if shape is (B, 3, N)
+         point_cloud_batch = point_cloud_batch.transpose(1, 2) # Transpose to (B, N, 3)
+
+    xyz_coords = point_cloud_batch[:, :, :3]
+
+    # Example using mean distance from centroid
+    centroid = torch.mean(xyz_coords, dim=1, keepdim=True) # Shape (B, 1, 3)
+    distances = torch.norm(xyz_coords - centroid, dim=2)    # Shape (B, N)
+    scale_metric = torch.mean(distances, dim=1)                   # Shape (B)
+    return scale_metric

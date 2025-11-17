@@ -1,13 +1,13 @@
 dataset:
-  root_folder: '/home/dim26fa/data/sim_cube_tetra'
+  root_folder: '/home/dim26fa/data/npc/storm/train'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
   remove_part_prob: 0.6
-  dataset_type: 'tetra'
+  dataset_type: 'npc'
   remove_corners: False
   number_corners_remove: [0,1,2]
-  remove_outliers: False
+  remove_outliers: True
   anisotropy: False
   anisotropy_factor: 0.6
   anisotropy_axis: 'z'
@@ -15,17 +15,17 @@ dataset:
   number_classes: 2
 model: 'pcn'
 train:
-  lr: 0.0001
+  lr: 0.001
   min_lr: 0.00001
   channels: 3
-  batch_size: 16
+  batch_size: 32
   num_workers: 0
   momentum: 0.9
   momentum2: 0.999
   num_epochs: 500
   loss: 'cd'
   gml_sigma: 2
-  early_stop_patience: 50
+  early_stop_patience: 100
   log_dir: '/home/dim26fa/coding/training'
   scheduler_type: reduce
   scheduler_factor: 0.75
@@ -45,13 +45,14 @@ train:
   lambda_reg: 0.01
   alpha_density: 0.5
   beta_sparsity: 0.02
-  num_dense: 1470
+  num_dense: 2048
   latent_dim: 1024
   grid_size: 2
   use_wandb: False
   export_samples_every: 0
   log_pointclouds: False
   max_vis_samples: 2000
+  beta: 0.7
 pcn_config:
   coarse_dim: 16384
   fine_dim: 1024

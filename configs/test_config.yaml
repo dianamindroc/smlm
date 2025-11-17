@@ -1,15 +1,14 @@
 dataset:
-
-  root_folder: '/home/dim26fa/data/test_cube_tetra/'
+  root_folder: '/home/dim26fa/data/sim_dna_old_2703_seed1234_test'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
-  remove_part_prob: 0.4
+  remove_part_prob: 0.1
   dataset_type: 'tetra'
-  remove_corners: False
+  remove_corners: True
   number_corners_remove: [0,1,2]
-  remove_outliers: False
-  anisotropy: False
+  remove_outliers: True
+  anisotropy: True
   anisotropy_factor: 1.5
   anisotropy_axis: 'z'
   number_classes: 1
@@ -35,7 +34,7 @@ test:
   augmentation: True
   save: True
   grid_size: 2
-  num_dense: 'highest'
+  num_dense: 2048
   latent_dim: 1024
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240529_122034/best_l1_cd.pth'
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240725_125117/best_l1_cd.pth'
@@ -46,5 +45,5 @@ test:
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20241009_225619/best_l1_cd.pth'
   #ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20241205_012746/best_l1_cd.pth'
   # ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20240819_100525/best_l1_cd.pth'
-  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20250327_222737/best_l1_cd.pth'
-  ckpt_path_class: '/home/dim26fa/coding/training/logs_pcn_20250327_222737/best_class_loss.pth'
+  ckpt_path: '/home/dim26fa/coding/training/logs_pcn_20250409_231410/best_l1_cd.pth'
+  ckpt_path_class: '/home/dim26fa/coding/training/logs_pcn_20250409_231410/best_class_loss.pth'
