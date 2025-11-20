@@ -47,24 +47,32 @@ The `pip install .` command will compile the CUDA operators against the currentl
 ***
 
 ### Training
-To train a network, do :
+To train PocaFoldAS on your data or the bundled demo data:
 
-`cd scripts`
-
-`python run_training.py --config /path/to/config.yaml --exp_name 'exp_name' --fixed_alpha=0.001`
-
-Set the path to the config file (e.g. configs/config.yaml), set an experiment name and, if desired, set a fixed_alpha. Alpha is used for setting a ratio between coarse and fine loss during training. If fixed alpha is set, the ratio stays always the same. Otherwise, it changes based on where we are during training, with later epochs considering a bigger ratio of the fine loss. 
-
-***
+1. Ensure dependencies are installed (see Installation).
+2. (Optional, container): set `TRAIN_LOG_DIR` (default `/workspace/smlm_logs`) to a mounted path for logs/checkpoints.
+3. Run: `python scripts/run_training.py --config configs/config_demo_data.yaml --exp_name demo_run`.
+   - Uses `demo_data/tetrahedron_seed1121_train` by default via the config.
+   - Logs/checkpoints go to the `log_dir` set in the config (override via env / config copy).
+   - Set `train.use_wandb: true` in the config or toggle `USE_WANDB` in the training notebook; the notebook writes a config copy to `artifacts/notebook_configs/` respecting `TRAIN_LOG_DIR`.
 
 ### Inference
-To test the network, do:
+Use the demo test split and the provided tetra checkpoint (stored under `weights/`):
 
-`cd scripts`
-
-***
+- Point `POCAFOLDAS_CKPT` to the demo tetra checkpoint (e.g., `weights/tetra.pth`).
+- Test data default: `demo_data/tetrahedron_seed1234_test`; override with `DEMO_TEST_ROOT` if needed.
+- If running in a container, set `POCAFOLDAS_INFER_OUT` to a writable/mounted directory (default `/workspace/smlm_inference`).
+- Run inference:
+  - Notebook: `tutorial/Inference_and_visualization.ipynb` (respects the env vars above).
+  - Or via script: `python scripts/test_pocafoldas.py --config configs/config_demo_data.yaml --ckpt $POCAFOLDAS_CKPT` (if you add a CLI wrapper).
 
 ### Tutorial notebooks
+
+#### Running notebooks in a container
+- Mount a writable log/checkpoint folder: `-v /host/logs:/workspace/smlm_logs` (training outputs) and optionally `-v /host/infer:/workspace/smlm_inference` (inference outputs).
+- Set env vars for the notebooks: `TRAIN_LOG_DIR=/workspace/smlm_logs` for training, `POCAFOLDAS_CKPT` for a checkpoint, and `POCAFOLDAS_INFER_OUT` for inference outputs if you override the defaults.
+- Launch Jupyter/Colab inside the container from the repo root; the notebooks already respect these env vars and will write configs to `artifacts/notebook_configs/`.
+
 We created tutorial notebooks for an easy understanding of the project.
 * Introduction and data simulation  <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Intro_and_data_simulation.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
@@ -154,7 +162,7 @@ smlm
 │   │   chamfer_distances.py
 │   │   folding_net.py
 │   │   losses.py
-│   │   pcn.py
+│   │   pocafoldas.py
 │   │   pcn_decoder.py
 │   │   transforms.py
 │   │   utils.py

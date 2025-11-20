@@ -1,0 +1,61 @@
+dataset:
+  root_folder: '/home/dim26fa/coding/coding/smlm/demo_data'
+  # use the training split shipped with the repo
+  classes: ['tetrahedron_seed1121_train']
+  suffix: '.csv'
+  highest_shape: 500
+  remove_part_prob: 0.0
+  dataset_type: 'demo'
+  remove_corners: False
+  number_corners_remove: [0, 1, 2]
+  remove_outliers: False
+  anisotropy: False
+  anisotropy_factor: 0.6
+  anisotropy_axis: 'z'
+  initial_alpha: 1.0
+  number_classes: 1
+
+model: 'pcn'
+
+train:
+  lr: 0.001
+  min_lr: 0.00001
+  channels: 3
+  batch_size: 16
+  num_workers: 0
+  momentum: 0.9
+  momentum2: 0.999
+  num_epochs: 200
+  loss: 'cd'
+  gml_sigma: 2
+  early_stop_patience: 50
+  log_dir: '/home/dim26fa/coding/coding/smlm/output/demo_training'
+  scheduler_type: reduce
+  scheduler_factor: 0.75
+  scheduler_patience: 10
+  gamma: 0.0001
+  step_size: 50
+  ignore_zeros: False
+  augmentation: False
+  initial_alpha:
+  loss1_improvement_threshold: 30
+  min_improvement_epochs: 10
+  classifier: False
+  pretrained: False
+  ckpt: None
+  autoencoder: False
+  lambda_reg: 0.01
+  alpha_density: 0.5
+  beta_sparsity: 0.02
+  num_dense: 2048
+  latent_dim: 1024
+  grid_size: 2
+  use_wandb: False
+  export_samples_every: 0
+  log_pointclouds: False
+  max_vis_samples: 2000
+  beta: 0.7
+
+pcn_config:
+  coarse_dim: 16384
+  fine_dim: 1024

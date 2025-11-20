@@ -1,6 +1,8 @@
-import pandas as pd
 import os
+import warnings
+
 import numpy as np
+import pandas as pd
 
 class Reader:
     """
@@ -251,20 +253,56 @@ def read_by_sample(path, sample):
     """
     import os
     import glob
-    all_files = glob.glob(os.path.join(path, f'*{sample}*'))
-    samples = [f for f in all_files if sample in os.path.basename(f).split('_')[0]]
+    sample_int = int(sample)
+    sample_str = str(sample_int)
+    all_files = glob.glob(os.path.join(path, f'*{sample_str}*'))
+
+    def matches_sample(fname):
+        token = os.path.basename(fname).split('_')[0]
+        try:
+            return int(token) == sample_int
+        except ValueError:
+            return token == sample_str
+
+    samples = [f for f in all_files if matches_sample(f)]
 
     gt = next((read_pc(s) for s in samples if 'gt' in s), None)
     inputt = next((read_pc(s) for s in samples if 'input' in s), None)
     output = next((read_pc(s) for s in samples if 'output' in s), None)
     attn = next((np.load(s)[0] for s in samples if 'attn' in s), None)
+    attn_value = None if attn is None else np.array(attn)
     return {'gt':gt,
             'input':inputt,
             'output':output,
             'gtdf': pd.DataFrame(gt, columns=['x', 'y', 'z']),
             'inputdf': pd.DataFrame(inputt, columns=['x', 'y', 'z']),
             'outputdf':pd.DataFrame(output, columns=['x', 'y', 'z']),
-            'attn':np.array(attn)}
+            'attn':attn_value}
+
+
+def read_samples(
+    path,
+    sample_numbers,
+    suppress_force_all_finite_warning: bool = True,
+):
+    """
+    Convenience wrapper to read several samples while optionally suppressing
+    scikit-learn's FutureWarning about ``force_all_finite``.
+
+    Args:
+        path (str): directory containing the samples.
+        sample_numbers (Iterable[int]): sample ids to load.
+        suppress_force_all_finite_warning (bool): whether to silence the noisy warning.
+    """
+    if suppress_force_all_finite_warning:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=".*force_all_finite.*",
+                category=FutureWarning,
+            )
+            return [read_by_sample(path, sample) for sample in sample_numbers]
+    return [read_by_sample(path, sample) for sample in sample_numbers]
 
 
 def read_pts_file(file_path):

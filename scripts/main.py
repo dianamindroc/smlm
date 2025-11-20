@@ -15,7 +15,8 @@ import random
 from helpers.data import get_highest_shape
 from helpers.logging import create_log_folder
 from helpers.visualization import print_pc, save_plots
-from model_architectures import pcn, losses
+from model_architectures import losses
+from model_architectures.pocafoldas import PocaFoldAS
 from model_architectures.transforms import ToTensor, Padding
 from model_architectures.utils import cfg_from_yaml_file, l1_cd_metric
 from dataset.SMLMDataset import Dataset
@@ -52,7 +53,7 @@ def run_training(config_file, log_wandb=True, data='shapenet'):
     if config.model == 'fold':
         model = folding_net.AutoEncoder()
     elif config.model == 'pcn':
-        model = pcn.PCN(config.pcn_config.coarse_dim, config.pcn_config.fine_dim)
+        model = PocaFoldAS(config.pcn_config.coarse_dim, config.pcn_config.fine_dim)
     elif config.model == 'pointr':
         model = pointr.AdaPoinTr(config.adapointr_config)
     else:
@@ -476,4 +477,3 @@ if __name__ == "__main__":
     #conf = cfg_from_yaml_file('/configs/config.yaml')
     run_training(config)
     print('Done')
-

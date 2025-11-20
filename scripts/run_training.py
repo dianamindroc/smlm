@@ -1,10 +1,10 @@
 import argparse
-from train_pcn import train
+from train_pocafoldas import train
 
 
 def main():
     # Set up argument parser
-    parser = argparse.ArgumentParser(description="Run PCN training")
+    parser = argparse.ArgumentParser(description="Run PocaFoldAS training")
 
     # Add arguments
     parser.add_argument('--config', type=str, required=True, help='Path to the config file')

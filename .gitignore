@@ -18,6 +18,7 @@ models/
 
 figures/
 completion3d/
+resources/
 
 simulation/new_sim.py
 simulation/sim_smlm_data.py

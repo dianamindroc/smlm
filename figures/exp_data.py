@@ -10,6 +10,26 @@ from sklearn.manifold import TSNE
 from scipy.signal import find_peaks
 import os
 from matplotlib.colors import LogNorm
+from typing import Any, Iterable, Mapping, Sequence, Optional, Union, Tuple
+from pathlib import Path
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+
+SHOW_SCALEBAR = True
+
+
+def _maybe_add_scalebar(ax, dx, units):
+    if not SHOW_SCALEBAR:
+        return
+    scalebar = ScaleBar(
+        dx=dx,
+        units=units,
+        location="lower right",
+        frameon=True,
+        color="white",
+        box_alpha=0.5,
+        box_color="black",
+    )
+    ax.add_artist(scalebar)
 
 
 def plot_xy_xz_histograms(data, grid_size=0.01, cmap='hot', save_to=None, units='nm', dx=90, z_cutoff=None, percentile_vmax=99.5, use_log_norm=False):
@@ -17,9 +37,9 @@ def plot_xy_xz_histograms(data, grid_size=0.01, cmap='hot', save_to=None, units=
     Plot XY and XZ histogram projections from a 3D point cloud and optionally save the plot.
 
     Parameters:
-    - data (str | pd.DataFrame | np.ndarray): Can be a file path to a .csv file, a DataFrame, or a NumPy array.
+    - data (Union[str, pd.DataFrame, np.ndarray]): Can be a file path to a .csv file, a DataFrame, or a NumPy array.
     - grid_size (float): Size of the grid cells for the histogram bins.
-    - save_to (str | None): File path to save the plot. If None, the plot is shown instead.
+    - save_to (Optional[str]): File path to save the plot. If None, the plot is shown instead.
     """
     try:
         # Handle different input types (file, DataFrame, or array)
@@ -113,17 +133,7 @@ def plot_xy_xz_histograms(data, grid_size=0.01, cmap='hot', save_to=None, units=
         #axs[0].set_xticks([])  # Remove ticks
         #axs[0].set_yticks([])
 
-        # Add scale bar to XY projection
-        scalebar_xy = ScaleBar(
-            dx= dx,  # 1.0 means coordinates are in real-world units
-            units=units,
-            location='lower right',
-            frameon=True,
-            color='white',
-            box_alpha=0.5,
-            box_color='black'
-        )
-        axs[0].add_artist(scalebar_xy)
+        _maybe_add_scalebar(axs[0], dx, units)
 
 
         # XZ Projection
@@ -133,17 +143,7 @@ def plot_xy_xz_histograms(data, grid_size=0.01, cmap='hot', save_to=None, units=
         axs[1].set_ylabel('Z')
         #axs[1].set_xticks([])  # Remove ticks
         #axs[1].set_yticks([])
-        # Add scale bar to XZ projection
-        scalebar_xz = ScaleBar(
-            dx=dx,  # 1.0 means coordinates are in real-world units
-            units=units,
-            location='lower right',
-            frameon=True,
-            color='white',
-            box_alpha=0.5,
-            box_color='black'
-        )
-        axs[1].add_artist(scalebar_xz)
+        _maybe_add_scalebar(axs[1], dx, units)
 
         plt.tight_layout()
 
@@ -172,7 +172,7 @@ def plot_xy_xz_histograms_with_hdbscan(data, grid_size=0.01, min_cluster_size=10
     Performs HDBSCAN clustering on 3D point cloud data and plots XY and XZ projections.
 
     Parameters:
-    - data (str | pd.DataFrame | np.ndarray): Can be a file path, DataFrame, or NumPy array.
+    - data (Union[str, pd.DataFrame, np.ndarray]): Can be a file path, DataFrame, or NumPy array.
     - grid_size (float): Size of the grid cells for the histogram bins.
     - min_cluster_size (int): Minimum size of clusters (HDBSCAN parameter).
     - min_samples (int): Min samples param for HDBSCAN core point detection.
@@ -180,7 +180,7 @@ def plot_xy_xz_histograms_with_hdbscan(data, grid_size=0.01, min_cluster_size=10
     - cluster_selection_method (str): Method for cluster extraction ('eom' or 'leaf').
     - cmap (str): Color map for the clusters.
     - noise_color (str): Color for noise points (label -1 in HDBSCAN).
-    - save_to (str | None): File path to save the plot.
+    - save_to (Optional[str]): File path to save the plot.
 
     Returns:
     - labels (np.ndarray): HDBSCAN cluster labels for each point
@@ -315,11 +315,11 @@ def plot_xy_xz_histograms(data, grid_size=0.01, model_structure=None, cmap='hot'
     Plot XY and XZ histogram projections from a 3D point cloud and overlay model_structure if provided.
 
     Parameters:
-    - data (str | pd.DataFrame | np.ndarray): File path, DataFrame, or NumPy array of shape Nx3.
+    - data (Union[str, pd.DataFrame, np.ndarray]): File path, DataFrame, or NumPy array of shape Nx3.
     - grid_size (float): Size of the histogram bins.
     - model_structure (np.ndarray | None): Optional 4x3 array to overlay on the projections.
     - cmap (str): Color map for the histogram.
-    - save_to (str | None): File path to save the plot. If None, the plot is shown.
+    - save_to (Optional[str]): File path to save the plot. If None, the plot is shown.
     """
     try:
         # Handle input data
@@ -414,14 +414,11 @@ def plot_multiple_projections(data_list, grid_size=0.01, sigma=1, cmap='hot', sa
     - grid_size (float): Size of the grid cells for the histogram bins.
     - sigma (float): Sigma for Gaussian smoothing.
     - cmap (str): Colormap to use for visualization.
-    - save_to (str | None): File path to save the plot. If None, the plot is shown instead.
+    - save_to (Optional[str]): File path to save the plot. If None, the plot is shown instead.
     - units (str): Units for the scale bar (e.g., 'nm', 'µm').
     - dx (float): Scale factor for the scale bar (physical size of one data unit).
     """
     try:
-        # Import required library for scale bars
-        from matplotlib_scalebar.scalebar import ScaleBar
-
         num_datasets = len(data_list)
         if num_datasets == 0:
             raise ValueError("The data list must contain at least one dataset.")
@@ -503,19 +500,7 @@ def plot_multiple_projections(data_list, grid_size=0.01, sigma=1, cmap='hot', sa
             axs[i][0].set_xlabel('X')
             axs[i][0].set_ylabel('Y')
 
-            # Add scale bar to XY projection
-            scalebar_xy = ScaleBar(
-                dx=dx,
-                units=units,
-                length_fraction=0.15,
-                height_fraction=0.02,
-                location='lower right',
-                frameon=False,
-                color='white',
-                box_alpha=0,
-                scale_loc='bottom'
-            )
-            axs[i][0].add_artist(scalebar_xy)
+            _maybe_add_scalebar(axs[i][0], dx, units)
             axs[i][0].set_xticks([])
             axs[i][0].set_yticks([])
 
@@ -525,19 +510,7 @@ def plot_multiple_projections(data_list, grid_size=0.01, sigma=1, cmap='hot', sa
             axs[i][1].set_xlabel('X')
             axs[i][1].set_ylabel('Z')
 
-            # Add scale bar to XZ projection with the same settings for consistency
-            scalebar_xz = ScaleBar(
-                dx=dx,
-                units=units,
-                length_fraction=0.15,
-                height_fraction=0.02,
-                location='lower right',
-                frameon=False,
-                color='white',
-                box_alpha=0,
-                scale_loc='bottom'
-            )
-            axs[i][1].add_artist(scalebar_xz)
+            _maybe_add_scalebar(axs[i][1], dx, units)
             axs[i][1].set_xticks([])
             axs[i][1].set_yticks([])
 
@@ -571,7 +544,7 @@ def plot_multiple_projections_grid(data_list, grid_size=0.01, sigma=1, cmap='hot
     - grid_size (float): Size of the grid cells for the histogram bins.
     - sigma (float): Standard deviation for Gaussian smoothing.
     - cmap (str): Colormap for the projections.
-    - save_to (str | None): File path to save the plot. If None, the plot is shown instead.
+    - save_to (Optional[str]): File path to save the plot. If None, the plot is shown instead.
     """
     try:
         num_datasets = len(data_list)
@@ -677,7 +650,7 @@ def plot_multiple_projections_ordered(data_list, grid_size=0.01, sigma=1, cmap='
        - sigma (float): Standard deviation for Gaussian smoothing.
        - cmap (str): Colormap for the projections.
        - cols (int): Number of columns to arrange datasets (default 2).
-       - save_to (str | None): File path to save the plot. If None, the plot is shown instead.
+       - save_to (Optional[str]): File path to save the plot. If None, the plot is shown instead.
        - column_titles (list | None): List of titles for each column. Defaults to ["GT", "Output"] for 2 columns.
        """
     try:
@@ -789,29 +762,8 @@ def plot_multiple_projections_ordered(data_list, grid_size=0.01, sigma=1, cmap='
             col_label = column_titles[col_idx] if col_idx < len(column_titles) else f"Column {col_idx + 1}"
             ax_xz.set_title(f'{col_label}: XZ')
 
-            # Add scale bar to XY projection
-            scalebar_xy = ScaleBar(
-                dx=dx,  # 1.0 means coordinates are in real-world units
-                units=units,
-                location='lower right',
-                frameon=True,
-                color='white',
-                box_alpha=0.5,
-                box_color='black'
-            )
-            ax_xy.add_artist(scalebar_xy)
-
-            # Add scale bar to XZ projection
-            scalebar_xz = ScaleBar(
-                dx=dx,  # 1.0 means coordinates are in real-world units
-                units=units,
-                location='lower right',
-                frameon=True,
-                color='white',
-                box_alpha=0.5,
-                box_color='black'
-            )
-            ax_xz.add_artist(scalebar_xz)
+            _maybe_add_scalebar(ax_xy, dx, units)
+            _maybe_add_scalebar(ax_xz, dx, units)
 
 
         # Turn off any unused subplots
@@ -850,6 +802,639 @@ def plot_multiple_projections_ordered(data_list, grid_size=0.01, sigma=1, cmap='
         print(f"An unexpected error occurred: {e}")
 
 
+def collect_sample_dataframes(
+    samples: Iterable[Mapping[str, pd.DataFrame]],
+    keys: Sequence[str] = ("inputdf", "outputdf"),
+) -> list[pd.DataFrame]:
+    """
+    Gather ordered dataframes from read_by_sample outputs.
+
+    Args:
+        samples: iterable of dict-like objects returned by read_by_sample.
+        keys: sequence describing which entries to pull (and ordering) for each sample.
+
+    Returns:
+        A flat list of DataFrames ordered first by key, then by sample.
+    """
+    ordered = []
+    for key in keys:
+        for sample in samples:
+            if key not in sample:
+                raise KeyError(f"Sample is missing '{key}'.")
+            ordered.append(sample[key])
+    return ordered
+
+
+def _prepare_dataframe(data: Union[str, pd.DataFrame, np.ndarray]) -> pd.DataFrame:
+    if isinstance(data, str):
+        data = pd.read_csv(data)
+    elif isinstance(data, np.ndarray):
+        if data.shape[1] != 3:
+            raise ValueError("Arrays must be (N, 3).")
+        data = pd.DataFrame(data, columns=["x", "y", "z"])
+    elif not isinstance(data, pd.DataFrame):
+        raise ValueError("Unsupported data type.")
+
+    if not all(col in data.columns for col in ["x", "y", "z"]):
+        raise ValueError("Data must contain x, y, z columns.")
+    return data
+
+
+def _compute_histograms(point_cloud: np.ndarray, grid_size: float, sigma: float):
+    x_min, x_max = np.min(point_cloud[:, 0]), np.max(point_cloud[:, 0])
+    y_min, y_max = np.min(point_cloud[:, 1]), np.max(point_cloud[:, 1])
+    z_min, z_max = np.min(point_cloud[:, 2]), np.max(point_cloud[:, 2])
+
+    # Avoid zero-width bins
+    if x_max == x_min:
+        x_max += grid_size
+    if y_max == y_min:
+        y_max += grid_size
+    if z_max == z_min:
+        z_max += grid_size
+
+    x_bins = max(1, int((x_max - x_min) / grid_size) + 1)
+    y_bins = max(1, int((y_max - y_min) / grid_size) + 1)
+    z_bins = max(1, int((z_max - z_min) / grid_size) + 1)
+
+    hist, _ = np.histogramdd(point_cloud, bins=[x_bins, y_bins, z_bins])
+
+    hist_xy = gaussian_filter(np.sum(hist, axis=2), sigma=sigma)
+    hist_xz = gaussian_filter(np.sum(hist, axis=1), sigma=sigma)
+    extent_xy = [x_min, x_max, y_min, y_max]
+    extent_xz = [x_min, x_max, z_min, z_max]
+    return hist_xy, extent_xy, hist_xz, extent_xz
+
+
+def plot_samples_stacked_grid(
+    samples: Sequence[Mapping[str, Any]],
+    sample_numbers: Sequence[int],
+    keys: Sequence[str],
+    key_labels: Optional[Sequence[str]],
+    grid_size: float,
+    sigma: float,
+    cmap: str,
+    dx: float,
+    units: str,
+    save_to: Optional[str],
+):
+    if not samples:
+        raise ValueError("No samples provided.")
+
+    num_samples = len(samples)
+    num_keys = len(keys)
+    if num_keys == 0:
+        raise ValueError("At least one key must be provided.")
+
+    if key_labels is None:
+        key_labels = [k.upper() for k in keys]
+    elif len(key_labels) != num_keys:
+        raise ValueError("key_labels length must match keys.")
+
+    rows = num_keys  # one row per key (e.g., input/output)
+    cols = num_samples * 2  # XY + XZ per sample
+    fig, axs = plt.subplots(rows, cols, figsize=(cols * 2.5, rows * 3.0))
+    if rows == 1:
+        axs = axs[np.newaxis, :]
+    if cols == 1:
+        axs = axs[:, np.newaxis]
+
+    for sample_idx, (sample, sample_id) in enumerate(zip(samples, sample_numbers)):
+        col_base = sample_idx * 2
+        for key_idx, key in enumerate(keys):
+            if key not in sample:
+                raise KeyError(f"Sample missing '{key}'.")
+            df = _prepare_dataframe(sample[key])
+            points = df[["x", "y", "z"]].to_numpy()
+            row = key_idx
+            ax_xy = axs[row, col_base]
+            ax_xz = axs[row, col_base + 1]
+
+            if points.size == 0:
+                ax_xy.axis("off")
+                ax_xz.axis("off")
+                ax_xy.text(
+                    0.5,
+                    0.5,
+                    f"No data for {key_labels[key_idx]}",
+                    ha="center",
+                    va="center",
+                    transform=ax_xy.transAxes,
+                    color="white",
+                )
+                ax_xz.text(
+                    0.5,
+                    0.5,
+                    f"No data for {key_labels[key_idx]}",
+                    ha="center",
+                    va="center",
+                    transform=ax_xz.transAxes,
+                    color="white",
+                )
+                continue
+
+            hist_xy, extent_xy, hist_xz, extent_xz = _compute_histograms(points, grid_size, sigma)
+
+            ax_xy.imshow(hist_xy.T, origin="lower", extent=extent_xy, aspect="auto", cmap=cmap)
+            ax_xy.set_xticks([])
+            ax_xy.set_yticks([])
+            ax_xy.set_title(f"{key_labels[key_idx]}: XY")
+
+            ax_xz.imshow(hist_xz.T, origin="lower", extent=extent_xz, aspect="auto", cmap=cmap)
+            ax_xz.set_xticks([])
+            ax_xz.set_yticks([])
+            ax_xz.set_title(f"{key_labels[key_idx]}: XZ")
+
+            # Scale bars omitted per visualization preference.
+
+    plt.tight_layout()
+    if save_to:
+        plt.savefig(save_to, dpi=600)
+        plt.close(fig)
+    else:
+        plt.show()
+def plot_samples_for_ids(
+    log_dir: str,
+    sample_numbers: Iterable[int],
+    keys: Sequence[str] = ("inputdf", "outputdf"),
+    key_labels: Optional[Sequence[str]] = None,
+    key_groups: Optional[Sequence[Sequence[str]]] = None,
+    key_label_groups: Optional[Sequence[Optional[Sequence[str]]]] = None,
+    save_to_groups: Optional[Sequence[Optional[str]]] = None,
+    save_figures: bool = False,
+    output_dir: Optional[str] = None,
+    grid_size: float = 0.01,
+    sigma: float = 1.0,
+    cmap: str = "hot",
+    dx: float = 130,
+    units: str = "nm",
+    save_to: Optional[str] = None,
+):
+    """Read samples, organize dataframes per key, and plot stacked XY/XZ grids.
+
+    Args:
+        log_dir: root directory containing the sample files.
+        sample_numbers: iterable of sample IDs (integers).
+        keys: entries to extract per sample (e.g., ("inputdf", "outputdf")).
+        key_labels: optional labels per key (defaults to capitalized key names).
+        key_groups: optional list of key tuples describing multiple figures to render.
+        key_label_groups: optional labels corresponding to each entry in key_groups.
+        save_to_groups: explicit output paths aligned with key_groups.
+        save_figures: when True, save every generated figure (path derived from output_dir or cwd).
+        output_dir: directory where figures are saved when save_figures is True.
+        grid_size: histogram bin step for projections.
+        sigma: Gaussian smoothing sigma for projections.
+        cmap: matplotlib colormap.
+        dx: scale bar conversion factor.
+        units: scale bar units.
+        save_to: optional path to save the figure instead of showing it.
+    """
+    from helpers.readers import read_samples
+
+    samples = read_samples(log_dir, sample_numbers)
+    sample_ids = list(sample_numbers)
+
+    if key_groups is None:
+        grouped_keys = [keys]
+    else:
+        if not key_groups:
+            raise ValueError("key_groups must contain at least one entry if provided.")
+        grouped_keys = list(key_groups)
+
+    if key_label_groups is not None:
+        if len(key_label_groups) != len(grouped_keys):
+            raise ValueError("key_label_groups must match key_groups length.")
+        grouped_labels = list(key_label_groups)
+    else:
+        grouped_labels = [key_labels] * len(grouped_keys)
+
+    if save_to_groups is not None and len(save_to_groups) != len(grouped_keys):
+        raise ValueError("save_to_groups must match key_groups length.")
+
+    output_dir_path: Optional[Path] = None
+    if save_figures:
+        output_dir_path = Path(output_dir) if output_dir else Path.cwd()
+        output_dir_path.mkdir(parents=True, exist_ok=True)
+
+    figures = []
+    for idx, current_keys in enumerate(grouped_keys):
+        current_labels = grouped_labels[idx]
+        current_save = None
+        if save_to_groups is not None:
+            current_save = save_to_groups[idx]
+        elif save_figures:
+            assert output_dir_path is not None
+            filename_key = "_".join(current_keys)
+            current_save = str(output_dir_path / f"{filename_key}_stacked.png")
+        elif len(grouped_keys) == 1:
+            current_save = save_to
+
+        fig = plot_samples_stacked_grid(
+            samples=samples,
+            sample_numbers=sample_ids,
+            keys=current_keys,
+            key_labels=current_labels,
+            grid_size=grid_size,
+            sigma=sigma,
+            cmap=cmap,
+            dx=dx,
+            units=units,
+            save_to=current_save,
+        )
+        figures.append(fig)
+
+    if len(figures) == 1:
+        return figures[0]
+    return figures
+
+
+def _extract_attention_map(attn: np.ndarray, head_index: Optional[int], aggregate: str) -> np.ndarray:
+    arr = np.asarray(attn)
+    if arr.ndim == 3:
+        num_heads = arr.shape[0]
+        if head_index is not None:
+            if head_index < 0 or head_index >= num_heads:
+                raise ValueError(f"head_index {head_index} out of range for {num_heads} heads.")
+            arr = arr[head_index]
+        else:
+            if aggregate == "mean":
+                arr = arr.mean(axis=0)
+            elif aggregate == "max":
+                arr = arr.max(axis=0)
+            else:
+                raise ValueError(f"Unsupported aggregate '{aggregate}'. Use 'mean' or 'max'.")
+    elif arr.ndim != 2:
+        raise ValueError(f"Attention map must be 2D or 3D, got shape {arr.shape}")
+    return arr
+
+
+def plot_attention_maps_for_ids(
+    log_dir: str,
+    sample_numbers: Iterable[int],
+    head_index: Optional[int] = None,
+    aggregate: str = "mean",
+    cmap: str = "viridis",
+    save_to: Optional[str] = None,
+    figsize: Optional[Tuple[float, float]] = None,
+):
+    """
+    Plot attention heatmaps for selected samples.
+
+    Args:
+        log_dir: directory containing saved sample outputs/attention matrices.
+        sample_numbers: iterable of sample IDs to visualize.
+        head_index: optional head to select when attention tensor has multiple heads.
+        aggregate: when head_index is None and tensor has multiple heads, aggregate across heads ('mean' or 'max').
+        cmap: matplotlib colormap for heatmaps.
+        save_to: optional path to save the resulting figure.
+        figsize: optional matplotlib figsize tuple.
+    """
+    from helpers.readers import read_samples
+
+    samples = read_samples(log_dir, sample_numbers)
+    sample_ids = list(sample_numbers)
+
+    num_samples = len(samples)
+    if num_samples == 0:
+        raise ValueError("No samples provided.")
+
+    cols = num_samples
+    rows = 1
+    if figsize is None:
+        figsize = (4 * cols, 4)
+    fig, axes = plt.subplots(rows, cols, figsize=figsize)
+    if num_samples == 1:
+        axes = np.array([axes])
+    axes = axes.reshape(rows, cols)
+
+    for idx, (sample, sample_id) in enumerate(zip(samples, sample_ids)):
+        ax = axes[0, idx]
+        attn = sample.get("attn")
+        if attn is None:
+            ax.axis("off")
+            ax.text(
+                0.5,
+                0.5,
+                s="No attention data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            continue
+
+        try:
+            attn_map = _extract_attention_map(attn, head_index, aggregate)
+        except ValueError as exc:
+            ax.axis("off")
+            ax.text(0.5, 0.5, s=str(exc), ha="center", va="center", transform=ax.transAxes)
+            continue
+
+        im = ax.imshow(attn_map, cmap=cmap)
+        ax.set_title(f"Sample {sample_id}")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    if save_to:
+        plt.savefig(save_to, dpi=600)
+        plt.close(fig)
+    else:
+        plt.show()
+    return fig
+
+
+def plot_single_sample_normalized(
+    log_dir: str,
+    sample_id: int,
+    keys: Sequence[str] = ("inputdf", "outputdf"),
+    cmap: str = "hot",
+    figsize: Tuple[float, float] = (6, 4),
+    save_to: Optional[str] = None,
+):
+    """
+    Plot normalized point clouds (per axis) for a single sample and key list.
+    """
+    from helpers.readers import read_samples
+
+    samples = read_samples(log_dir, [sample_id])
+    if not samples:
+        raise ValueError("Sample not found.")
+
+    sample = samples[0]
+    figs = []
+    for key in keys:
+        data = sample.get(key)
+        if data is None:
+            continue
+        df = _prepare_dataframe(data)
+        points = df[["x", "y", "z"]].to_numpy().astype(float)
+
+        fig, axes = plt.subplots(1, 2, figsize=figsize, facecolor="black")
+        fig.patch.set_facecolor("black")
+        ax_xy, ax_xz = axes
+        for ax in axes:
+            ax.set_facecolor("black")
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        for ax, plane in zip((ax_xy, ax_xz), ("xy", "xz")):
+            proj = points[:, (0, 1) if plane == "xy" else (0, 2)]
+            x_min, x_max = proj[:, 0].min(), proj[:, 0].max()
+            y_min, y_max = proj[:, 1].min(), proj[:, 1].max()
+            x_bins = max(1, int((x_max - x_min) / 0.01) + 1)
+            y_bins = max(1, int((y_max - y_min) / 0.01) + 1)
+            hist, _, _ = np.histogram2d(proj[:, 0], proj[:, 1], bins=[x_bins, y_bins])
+            hist = gaussian_filter(hist, sigma=1)
+            ax.imshow(
+                hist.T,
+                origin="lower",
+                extent=[x_min, x_max, y_min, y_max],
+                aspect="auto",
+                cmap=cmap,
+            )
+            ax.set_title(f"{sample_id} {key} {plane.upper()}")
+            _maybe_add_scalebar(ax, dx=130, units="nm")
+
+        plt.tight_layout()
+        if save_to:
+            out = Path(save_to)
+            if out.suffix:
+                filename = f"{out.stem}_{sample_id}_{key}{out.suffix}"
+                out = out.with_name(filename)
+            else:
+                out = out / f"{sample_id}_{key}.png"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(out, dpi=600)
+            plt.close(fig)
+        else:
+            plt.show()
+        figs.append(fig)
+
+    if not figs:
+        raise ValueError("No valid point clouds found for plotting.")
+    return figs if len(figs) > 1 else figs[0]
+
+
+def plot_single_sample_3d(
+    log_dir: str,
+    sample_id: int,
+    point_key: str = "inputdf",
+    intensities: Optional[str] = None,
+    cmap: str = "hot",
+    save_to: Optional[str] = None,
+    elev: float = 30.0,
+    azim: float = 120.0,
+    intensity_gamma: float = 0.5,
+    point_size: float = 3.0,
+):
+    """Render a 3D scatter for a single sample on a black background."""
+    from helpers.readers import read_samples
+
+    samples = read_samples(log_dir, [sample_id])
+    if not samples:
+        raise ValueError("Sample not found.")
+
+    sample = samples[0]
+    data = sample.get(point_key)
+    if data is None:
+        raise ValueError(f"Point cloud '{point_key}' missing for sample {sample_id}.")
+
+    df = _prepare_dataframe(data)
+    points = df[["x", "y", "z"]].to_numpy().astype(float)
+
+    if intensities and intensities in df.columns:
+        vals = df[intensities].to_numpy().astype(float)
+    else:
+        from sklearn.neighbors import NearestNeighbors
+
+        k = min(16, len(points))
+        nbrs = NearestNeighbors(n_neighbors=k).fit(points)
+        distances, _ = nbrs.kneighbors(points)
+        # use distance to kth neighbor as inverse density
+        density = 1.0 / (distances[:, -1] + 1e-8)
+        vals = density
+
+    vals = vals.astype(float)
+    vals = (vals - vals.min()) / (vals.max() - vals.min() + 1e-8)
+    if intensity_gamma != 1.0:
+        vals = np.power(vals, intensity_gamma)
+
+    fig = plt.figure(figsize=(6, 6), facecolor="black")
+    ax = fig.add_subplot(111, projection="3d", facecolor="black")
+    ax.scatter(points[:, 0], points[:, 1], points[:, 2], c=vals, cmap=cmap, s=point_size, alpha=0.85)
+    ax.grid(False)
+    for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+        axis.pane.fill = False
+        axis.pane.set_edgecolor("black")
+        axis.line.set_color("white")
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
+    ax.set_title(f"{sample_id} {point_key} 3D")
+
+    if save_to:
+        out = Path(save_to)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out, dpi=600, facecolor=fig.get_facecolor(), bbox_inches="tight")
+        plt.close(fig)
+    else:
+        plt.show()
+    return fig
+
+
+def _attention_vector_from_map(attn_map: np.ndarray, vector_mode: str) -> np.ndarray:
+    if attn_map.ndim != 2:
+        raise ValueError(f"Attention map must be 2D to derive vector, got shape {attn_map.shape}.")
+    if vector_mode == "mean_received":
+        vec = attn_map.mean(axis=0)
+    elif vector_mode == "sum_received":
+        vec = attn_map.sum(axis=0)
+    elif vector_mode == "mean_sent":
+        vec = attn_map.mean(axis=1)
+    elif vector_mode == "sum_sent":
+        vec = attn_map.sum(axis=1)
+    else:
+        raise ValueError("vector_mode must be one of 'mean_received', 'sum_received', 'mean_sent', 'sum_sent'.")
+    return vec
+
+
+def plot_pointclouds_with_attention(
+    log_dir: str,
+    sample_numbers: Iterable[int],
+    point_key: str = "inputdf",
+    head_index: Optional[int] = None,
+    aggregate: str = "mean",
+    vector_mode: str = "mean_received",
+    cmap: str = "viridis",
+    save_to: Optional[str] = None,
+    save_colorbar_to: Optional[str] = None,
+    figsize: Optional[Tuple[float, float]] = None,
+    normalize: bool = True,
+):
+    """
+    Plot point clouds colored by attention scores per point.
+
+    Args:
+        log_dir: directory containing saved sample outputs.
+        sample_numbers: iterable of sample IDs to visualize.
+        point_key: which dataframe in each sample to color ('inputdf', 'outputdf', 'gtdf', ...).
+        head_index: optional index of attention head to visualize; if None aggregate across heads.
+        aggregate: aggregation across heads ('mean' or 'max') when head_index is None.
+        vector_mode: how to reduce the 2D attention map to per-point scores.
+        cmap: colormap for coloring points.
+        save_to: optional path to save the figure.
+        figsize: optional matplotlib figsize tuple.
+    """
+    from helpers.readers import read_samples
+
+    samples = read_samples(log_dir, sample_numbers)
+    sample_ids = list(sample_numbers)
+
+    if not samples:
+        raise ValueError("No samples provided.")
+
+    figures: list[tuple[plt.Figure, Optional[Path]]] = []
+    colorbar_saves = []
+    for idx, (sample, sample_id) in enumerate(zip(samples, sample_ids)):
+        fig, axes = plt.subplots(1, 2, figsize=figsize or (10, 4))
+        ax_xy, ax_xz = axes
+        pc_df = sample.get(point_key)
+        attn = sample.get("attn")
+        if pc_df is None or attn is None:
+            for ax in (ax_xy, ax_xz):
+                ax.set_axis_off()
+                ax.text(0.5, 0.5, s="Missing data", ha="center", va="center", transform=ax.transAxes)
+            continue
+
+        df = _prepare_dataframe(pc_df)
+        points = df[["x", "y", "z"]].to_numpy()
+        try:
+            attn_map = _extract_attention_map(attn, head_index, aggregate)
+        except ValueError as exc:
+            for ax in (ax_xy, ax_xz):
+                ax.set_axis_off()
+                ax.text(0.5, 0.5, s=str(exc), ha="center", va="center", transform=ax.transAxes)
+            continue
+
+        try:
+            scores = _attention_vector_from_map(attn_map, vector_mode)
+        except ValueError as exc:
+            for ax in (ax_xy, ax_xz):
+                ax.set_axis_off()
+                ax.text(0.5, 0.5, s=str(exc), ha="center", va="center", transform=ax.transAxes)
+            continue
+
+        if len(scores) != len(points):
+            for ax in (ax_xy, ax_xz):
+                ax.set_axis_off()
+                ax.text(0.5, 0.5, s="Attention size mismatch", ha="center", va="center", transform=ax.transAxes)
+            continue
+
+        if normalize and scores.size > 0:
+            min_val = scores.min()
+            max_val = scores.max()
+            if max_val > min_val:
+                scores = (scores - min_val) / (max_val - min_val)
+        sc_xy = ax_xy.scatter(points[:, 0], points[:, 1], c=scores, cmap=cmap, s=5, alpha=0.7)
+        ax_xy.set_title(f"{sample_id} XY")
+        ax_xy.set_xlabel("X")
+        ax_xy.set_ylabel("Y")
+
+        sc_xz = ax_xz.scatter(points[:, 0], points[:, 2], c=scores, cmap=cmap, s=5, alpha=0.7)
+        ax_xz.set_title(f"{sample_id} XZ")
+        ax_xz.set_xlabel("X")
+        ax_xz.set_ylabel("Z")
+
+        plt.tight_layout()
+        out_path_fig = None
+        if save_to:
+            base = Path(save_to)
+            if base.suffix:
+                if len(sample_ids) > 1:
+                    filename = f"{base.stem}_{sample_id}{base.suffix}"
+                    out_path = base.with_name(filename)
+                else:
+                    out_path = base
+            else:
+                out_path = base / f"{sample_id}_{vector_mode}.png"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(out_path, dpi=600)
+            plt.close(fig)
+            out_path_fig = out_path
+        else:
+            plt.show()
+        figures.append((fig, out_path_fig))
+
+    if save_colorbar_to and figures:
+        sample = samples[0]
+        pc_df = sample.get(point_key)
+        attn = sample.get("attn")
+        if pc_df is not None and attn is not None:
+            df = _prepare_dataframe(pc_df)
+            points = df[["x", "y", "z"]].to_numpy()
+            attn_map = _extract_attention_map(attn, head_index, aggregate)
+            scores = _attention_vector_from_map(attn_map, vector_mode)
+            if normalize and scores.size > 0:
+                min_val = scores.min()
+                max_val = scores.max()
+                if max_val > min_val:
+                    scores = (scores - min_val) / (max_val - min_val)
+            fig_cb, ax_cb = plt.subplots(figsize=(4, 1))
+            norm = plt.Normalize(vmin=scores.min(), vmax=scores.max())
+            fig_cb.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=ax_cb, orientation="horizontal", label="Attention")
+            out_cb = Path(save_colorbar_to)
+            out_cb.parent.mkdir(parents=True, exist_ok=True)
+            fig_cb.savefig(out_cb, dpi=600, bbox_inches="tight")
+            plt.close(fig_cb)
+
+    figs_only = [f for f, _ in figures]
+    if not figs_only:
+        return None
+    return figs_only if len(figs_only) > 1 else figs_only[0]
+
+
 def plot_multiple_projections_black(data_list, grid_size=0.01, sigma=1, cmap='hot', dx=100, units='nm', save_to=None):
     """
     Plot multiple sets of XY and XZ histogram projections with a 3D scatter plot for each sample,
@@ -860,7 +1445,7 @@ def plot_multiple_projections_black(data_list, grid_size=0.01, sigma=1, cmap='ho
     - grid_size (float): Size of the grid cells for the histogram bins.
     - sigma (float): Standard deviation for Gaussian smoothing.
     - cmap (str): Colormap for the projections.
-    - save_to (str | None): File path to save the plot. If None, the plot is shown instead.
+    - save_to (Optional[str]): File path to save the plot. If None, the plot is shown instead.
     """
     try:
         num_datasets = len(data_list)
@@ -922,32 +1507,8 @@ def plot_multiple_projections_black(data_list, grid_size=0.01, sigma=1, cmap='ho
             ax_xy = axs[row_idx, col_idx]  # XY Projection
             ax_xz = axs[row_idx, col_idx + 1]  # XZ Projection
 
-            scalebar_xy = ScaleBar(
-                dx=dx,  # Set this to your correct scale factor (e.g., 100 nm per unit)
-                units=units,
-                length_fraction=0.15,
-                height_fraction=0.02,
-                location='lower right',
-                frameon=False,
-                color='white',
-                box_alpha=0,
-                scale_loc='bottom'
-            )
-            ax_xy.add_artist(scalebar_xy)
-
-            # Add scale bar to XZ projection with same settings
-            scalebar_xz = ScaleBar(
-                dx=dx,  # Use the same scale factor for consistency
-                units=units,
-                length_fraction=0.15,
-                height_fraction=0.02,
-                location='lower right',
-                frameon=False,
-                color='white',
-                box_alpha=0,
-                scale_loc='bottom'
-            )
-            ax_xz.add_artist(scalebar_xz)
+            _maybe_add_scalebar(ax_xy, dx, units)
+            _maybe_add_scalebar(ax_xz, dx, units)
             ax_3d = fig.add_subplot(rows, cols, (row_idx * cols) + col_idx + 3, projection='3d', facecolor='black')
 
             # Plot XY projection
@@ -1560,121 +2121,126 @@ def plot_errors_by_corners(data_dict, save_to=None):
     plt.show()
 
 
-# ? Define your experimental parameters (Update with actual values)
-psf_size = 30  # nm (Point Spread Function size)
-pixel_size = 100  # nm (Camera pixel size)
-background = 10  # photons per pixel
-mean_photons = 5000  # Mean detected photons per localization
+def _run_manual_analysis():
+    # ? Define your experimental parameters (Update with actual values)
+    psf_size = 30  # nm (Point Spread Function size)
+    pixel_size = 100  # nm (Camera pixel size)
+    background = 10  # photons per pixel
+    mean_photons = 5000  # Mean detected photons per localization
 
-# Compute theoretical localization precision
-predicted_precision = thompson_mortensen_precision(mean_photons, psf_size, pixel_size, background)
+    # Compute theoretical localization precision
+    predicted_precision = thompson_mortensen_precision(mean_photons, psf_size, pixel_size, background)
 
-import glob
-csv_files = glob.glob(r"C:\Users\diana\PhD\data\tetra_heydarian\tetra\*.csv")  # Adjust this path
+    import glob
+    csv_files = glob.glob(r"C:\Users\diana\PhD\data\tetra_heydarian\tetra\*.csv")  # Adjust this path
 
-sigma_values = []
+    sigma_values = []
 
-for file in csv_files:
-    # Load dataset
-    df = pd.read_csv(file)
-    df = get_clusters(df, plot=False)
+    for file in csv_files:
+        # Load dataset
+        df = pd.read_csv(file)
+        df = get_clusters(df, plot=False)
 
-    df = get_distance_distribution(df, plot=False)
+        df = get_distance_distribution(df, plot=False)
 
-    # Compute sigma (localization spread) using Maxwell-Boltzmann fit
-    sigma_fit = np.sqrt(np.mean(df["radial_distance"] ** 2) / 3)
+        # Compute sigma (localization spread) using Maxwell-Boltzmann fit
+        sigma_fit = np.sqrt(np.mean(df["radial_distance"] ** 2) / 3)
 
-    # Store sigma value for this sample
-    sigma_values.append(sigma_fit)
+        # Store sigma value for this sample
+        sigma_values.append(sigma_fit)
 
-# Compute the overall average ? across all samples
-average_sigma = np.mean(sigma_values)
-#std_sigma = np.std(sigma_values) 
+    # Compute the overall average ? across all samples
+    average_sigma = np.mean(sigma_values)
 
-# Extract different individual stats from big stats dict
+    # Extract different individual stats from big stats dict
 
-from helpers.pc_stats import load_and_analyze_point_clouds
-pathh = '/home/dim26fa/data/sim_25022025_5'
-stats = load_and_analyze_point_clouds(pathh)
-
-
-#stats = stats_exp
-num_points = [entry['num_points'] for item in stats for key, entry in item.items() if 'num_points' in entry]
-cluster_sizes = [entry['cluster_size'] for item in stats for key, entry in item.items() if 'cluster_size' in entry]
-cluster_stds = [entry['cluster_std'] for item in stats for key, entry in item.items() if 'cluster_std' in entry]
-sample_stds = [entry['sample_std'] for item in stats for key, entry in item.items() if 'sample_std' in entry]  # Assuming 'var' is variance
+    from helpers.pc_stats import load_and_analyze_point_clouds
+    pathh = '/home/dim26fa/data/sim_25022025_5'
+    stats = load_and_analyze_point_clouds(pathh)
 
 
+    #stats = stats_exp
+    num_points = [entry['num_points'] for item in stats for key, entry in item.items() if 'num_points' in entry]
+    cluster_sizes = [entry['cluster_size'] for item in stats for key, entry in item.items() if 'cluster_size' in entry]
+    cluster_stds = [entry['cluster_std'] for item in stats for key, entry in item.items() if 'cluster_std' in entry]
+    sample_stds = [entry['sample_std'] for item in stats for key, entry in item.items() if 'sample_std' in entry]  # Assuming 'var' is variance
 
-# Extract standard deviation values
-cluster_std_x, cluster_std_y, cluster_std_z = [], [], []
-sample_std_x, sample_std_y, sample_std_z = [], [], []
 
-for series in cluster_stds:
-    if isinstance(series, pd.Series):
-        cluster_std_x.append(series['x'])
-        cluster_std_y.append(series['y'])
-        cluster_std_z.append(series['z'])
 
-for series in sample_stds:
-    if isinstance(series, pd.Series):
-        sample_std_x.append(series['x'])
-        sample_std_y.append(series['y'])
-        sample_std_z.append(series['z'])
-fig, axes = plt.subplots(2, 3, figsize=(7.68, 5.12))
-# First row: Cluster Std (X, Y, Z) - Histograms
-sns.histplot(cluster_std_x, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[0, 0])
-axes[0, 0].set_title("Cluster Std (X)", fontsize=10)
-axes[0, 0].axvline(np.mean(cluster_std_x), color='red', linestyle='dashed', label='Mean')
-sns.histplot(cluster_std_y, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[0, 1])
-axes[0, 1].set_title("Cluster Std (Y)", fontsize=10)
-axes[0, 1].axvline(np.mean(cluster_std_y), color='red', linestyle='dashed', label='Mean')
-sns.histplot(cluster_std_z, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[0, 2])
-axes[0, 2].set_title("Cluster Std (Z)", fontsize=10)
-axes[0, 2].axvline(np.mean(cluster_std_z), color='red', linestyle='dashed', label='Mean')
+    # Extract standard deviation values
+    cluster_std_x, cluster_std_y, cluster_std_z = [], [], []
+    sample_std_x, sample_std_y, sample_std_z = [], [], []
 
-# Second row: Sample Std (X, Y, Z) - Histograms
-sns.histplot(sample_std_x, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[1, 0])
-axes[1, 0].set_title("Sample Std (X)", fontsize=10)
-axes[1, 0].axvline(np.mean(sample_std_x), color='red', linestyle='dashed', label='Mean')
-sns.histplot(sample_std_y, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[1, 1])
-axes[1, 1].set_title("Sample Std (Y)", fontsize=10)
-axes[1, 1].axvline(np.mean(sample_std_y), color='red', linestyle='dashed', label='Mean')
+    for series in cluster_stds:
+        if isinstance(series, pd.Series):
+            cluster_std_x.append(series['x'])
+            cluster_std_y.append(series['y'])
+            cluster_std_z.append(series['z'])
 
-sns.histplot(sample_std_z, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[1, 2])
-axes[1, 2].set_title("Sample Std (Z)", fontsize=10)
-axes[1, 2].axvline(np.mean(sample_std_z), color='red', linestyle='dashed', label='Mean')
+    for series in sample_stds:
+        if isinstance(series, pd.Series):
+            sample_std_x.append(series['x'])
+            sample_std_y.append(series['y'])
+            sample_std_z.append(series['z'])
+    fig, axes = plt.subplots(2, 3, figsize=(7.68, 5.12))
+    # First row: Cluster Std (X, Y, Z) - Histograms
+    sns.histplot(cluster_std_x, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[0, 0])
+    axes[0, 0].set_title("Cluster Std (X)", fontsize=10)
+    axes[0, 0].axvline(np.mean(cluster_std_x), color='red', linestyle='dashed', label='Mean')
+    sns.histplot(cluster_std_y, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[0, 1])
+    axes[0, 1].set_title("Cluster Std (Y)", fontsize=10)
+    axes[0, 1].axvline(np.mean(cluster_std_y), color='red', linestyle='dashed', label='Mean')
+    sns.histplot(cluster_std_z, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[0, 2])
+    axes[0, 2].set_title("Cluster Std (Z)", fontsize=10)
+    axes[0, 2].axvline(np.mean(cluster_std_z), color='red', linestyle='dashed', label='Mean')
 
-plt.tight_layout()
-#plt.savefig('/home/dim26fa/figures/sim_stats_std2.png', dpi=600)
-plt.show()
+    # Second row: Sample Std (X, Y, Z) - Histograms
+    sns.histplot(sample_std_x, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[1, 0])
+    axes[1, 0].set_title("Sample Std (X)", fontsize=10)
+    axes[1, 0].axvline(np.mean(sample_std_x), color='red', linestyle='dashed', label='Mean')
+    sns.histplot(sample_std_y, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[1, 1])
+    axes[1, 1].set_title("Sample Std (Y)", fontsize=10)
+    axes[1, 1].axvline(np.mean(sample_std_y), color='red', linestyle='dashed', label='Mean')
 
-# Create a figure with subplots
-fig, axes = plt.subplots(2, 2, figsize=(7.68, 5.12))
+    sns.histplot(sample_std_z, kde=True, bins=30, color='steelblue', edgecolor='black', alpha=0.8, ax=axes[1, 2])
+    axes[1, 2].set_title("Sample Std (Z)", fontsize=10)
+    axes[1, 2].axvline(np.mean(sample_std_z), color='red', linestyle='dashed', label='Mean')
 
-# Histogram with density plot for num_points
-sns.histplot(num_points, kde=True, bins=50, ax=axes[0, 0], color="teal")
-#axes[0, 0].axvline(np.mean(num_points), color='red', linestyle='dashed', label='Mean')
-axes[0, 0].set_title("Number of Points")
-axes[0, 0].set_ylabel("Count")
-axes[0, 0].set_ylim(bottom=0)
+    plt.tight_layout()
+    #plt.savefig('/home/dim26fa/figures/sim_stats_std2.png', dpi=600)
+    plt.show()
 
-# Histogram with density plot for cluster_sizes
-sns.histplot(cluster_sizes, kde=True, bins=50, ax=axes[0, 1], color="teal")
-#axes[0, 1].axvline(np.mean(cluster_sizes), color='red', linestyle='dashed', label='Mean')
-axes[0, 1].set_title("Cluster Sizes")
-axes[0, 1].set_ylabel("Count")
-axes[0, 1].set_ylim(bottom=0)
+    # Create a figure with subplots
+    fig, axes = plt.subplots(2, 2, figsize=(7.68, 5.12))
 
-# Boxplot for num_points
-sns.boxplot(y=num_points, ax=axes[1, 0], color="teal")
-axes[1, 0].set_title("Number of Points")
+    # Histogram with density plot for num_points
+    sns.histplot(num_points, kde=True, bins=50, ax=axes[0, 0], color="teal")
+    #axes[0, 0].axvline(np.mean(num_points), color='red', linestyle='dashed', label='Mean')
+    axes[0, 0].set_title("Number of Points")
+    axes[0, 0].set_ylabel("Count")
+    axes[0, 0].set_ylim(bottom=0)
 
-# Boxplot for cluster_sizes
-sns.boxplot(y=cluster_sizes, ax=axes[1, 1], color="teal")
-axes[1, 1].set_title("Cluster Sizes")
+    # Histogram with density plot for cluster_sizes
+    sns.histplot(cluster_sizes, kde=True, bins=50, ax=axes[0, 1], color="teal")
+    #axes[0, 1].axvline(np.mean(cluster_sizes), color='red', linestyle='dashed', label='Mean')
+    axes[0, 1].set_title("Cluster Sizes")
+    axes[0, 1].set_ylabel("Count")
+    axes[0, 1].set_ylim(bottom=0)
 
-# Adjust layout
-plt.tight_layout()
-plt.savefig('/home/dim26fa/figures/sim_stats_num_points1804.png', dpi=600)
-plt.show()
+    # Boxplot for num_points
+    sns.boxplot(y=num_points, ax=axes[1, 0], color="teal")
+    axes[1, 0].set_title("Number of Points")
+
+    # Boxplot for cluster_sizes
+    sns.boxplot(y=cluster_sizes, ax=axes[1, 1], color="teal")
+    axes[1, 1].set_title("Cluster Sizes")
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.savefig('/home/dim26fa/figures/sim_stats_num_points1804.png', dpi=600)
+    plt.show()
+
+
+# Uncomment to run manual exploratory plots when executing the module directly.
+# if __name__ == '__main__':
+#     _run_manual_analysis()
