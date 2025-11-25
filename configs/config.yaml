@@ -1,5 +1,5 @@
 dataset:
-  root_folder: '/home/dim26fa/data/npc/storm/train'
+  root_folder: '/path/to/training/data'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500
@@ -26,7 +26,7 @@ train:
   loss: 'cd'
   gml_sigma: 2
   early_stop_patience: 100
-  log_dir: '/home/dim26fa/coding/training'
+  log_dir: '/path/to/log/dir'
   scheduler_type: reduce
   scheduler_factor: 0.75
   scheduler_patience: 20

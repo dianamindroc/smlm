@@ -53,7 +53,7 @@ adapointr_config:
 dataset:
   classes:
   - all
-  root_folder: /home/dim26fa/data/shapenet
+  root_folder: data/shapenet
   suffix: .pts
 model: pointr
 pcn_config:

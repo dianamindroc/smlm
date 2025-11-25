@@ -1,5 +1,5 @@
 dataset:
-  root_folder: '/home/dim26fa/coding/coding/smlm/demo_data'
+  root_folder: 'demo_data/tetrahedron_seed1121_train'
   # use the training split shipped with the repo
   classes: ['tetrahedron_seed1121_train']
   suffix: '.csv'
