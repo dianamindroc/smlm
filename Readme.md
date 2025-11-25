@@ -86,7 +86,7 @@ We created tutorial notebooks for an easy understanding of the project.
 To run the notebooks from the container we created and avoid setting up all the enviroment from scratch, follow these steps: 
 - Pull the published image with Singularity if you prefer it over Docker: `singularity pull pocafoldas_latest.sif docker://dianamindroc/pocafoldas:latest`, then `singularity exec pocafoldas_latest.sif bash`
 - Mount a writable log/checkpoint folder: `-v /host/logs:/workspace/smlm_logs` (training outputs) and optionally `-v /host/infer:/workspace/smlm_inference` (inference outputs)
-- Map the notebook port from the container to the host when you start it (e.g., `-p 8888:8888` for Docker, or pass `--port 8888 --ip 0.0.0.0` to `jupyter lab` inside Singularity) so you can open the `http://127.0.0.1:<port>` URL printed by Jupyter.
+- Map the notebook port from the container to the host when you start it (e.g., `-p 8888:8888` for Docker, or pass `--port 8888 --ip 0.0.0.0` to `jupyter lab` inside Singularity) so you can open the `http://127.0.0.1:<port>` in your browser.
 - After you start the container shell, export the env vars the notebooks read: `TRAIN_LOG_DIR=/workspace/smlm_logs` for training logs, `POCAFOLDAS_CKPT` for the checkpoint path, and `POCAFOLDAS_INFER_OUT` if you override the inference output directory
 - Launch Jupyter/Colab inside the container from the repo root
 
