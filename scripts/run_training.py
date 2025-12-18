@@ -1,5 +1,10 @@
 import argparse
-from train_pocafoldas import train
+
+# Support both direct execution from repo root and module-style imports.
+try:
+    from train_pocafoldas import train  # type: ignore
+except ImportError:  # pragma: no cover - fallback for when run as a module
+    from scripts.train_pocafoldas import train  # type: ignore
 
 
 def main():

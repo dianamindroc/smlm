@@ -18,6 +18,8 @@ dist/
 data/
 models/
 
+artifacts/
+
 figures/
 completion3d/
 resources/
