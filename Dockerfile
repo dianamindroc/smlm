@@ -23,9 +23,14 @@ RUN python3 -m pip install --upgrade pip \
 WORKDIR /workspace
 COPY . /workspace
 
-# install your package, then the CUDA extensions (with no build isolation)
-RUN python3 -m pip install --no-cache-dir . \
- && git clone --depth 1 https://github.com/qinglew/PCN-PyTorch.git /tmp/PCN-PyTorch \
+# 1. Install your package
+RUN python3 -m pip install --no-cache-dir .
+
+# 2. Cleanup Scipy 
+RUN python3 -c "import importlib, pathlib, shutil; p = pathlib.Path(importlib.import_module('scipy').__file__).parent; [shutil.rmtree(p / r) for r in ['tests', 'stats/tests'] if (p / r).exists()]"
+
+# 3. Install PCN-PyTorch extensions and JupyterLab
+RUN git clone --depth 1 https://github.com/qinglew/PCN-PyTorch.git /tmp/PCN-PyTorch \
  && python3 -m pip install --no-cache-dir --no-build-isolation /tmp/PCN-PyTorch/extensions/chamfer_distance \
  && rm -rf /tmp/PCN-PyTorch \
  && python3 -m pip install --no-cache-dir jupyterlab

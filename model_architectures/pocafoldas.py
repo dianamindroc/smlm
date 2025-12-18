@@ -1,11 +1,11 @@
 # PCN network inspired from: Copyright <2023> <https://github.com/qinglew/PCN-PyTorch>
-# Adapted by adding self-attention, dropout and adaptive folding
+# Adapted by adding self-attention, dropout, mean pooling and adaptive folding
 
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from model_architectures.attention import EnhancedSelfAttention, RotationInvariantAttention
+from model_architectures.attention import EnhancedSelfAttention
 from model_architectures.adaptive_folding import AdaptiveFolding
 
 class PocaFoldAS(nn.Module):
@@ -174,7 +174,12 @@ class PocaFoldAS(nn.Module):
         seed = seed.reshape(B, -1, self.num_dense)  # (B, 2, num_fine)
         feature_global = feature_global_return.unsqueeze(2).expand(-1, -1, self.num_dense)  # (B, 1024, num_fine)
 
-        # TODO: added this check if good
+        expected_points = self.num_dense
+        if feature_global.shape[-1] != expected_points or seed.shape[-1] != expected_points:
+            raise ValueError(
+                f"Decoder inputs expect {expected_points} points but got "
+                f"{feature_global.shape[-1]} (feature_global) and {seed.shape[-1]} (seed)"
+            )
         # attended_features = self.folding_attention(feature_global, seed)
         # attended_features = attended_features.expand(-1, -1, self.num_dense)
         # skip = torch.cat([feature_global, feature_global1, seed, point_feat], dim=1)

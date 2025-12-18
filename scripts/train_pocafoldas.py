@@ -16,8 +16,8 @@ import pickle
 
 
 try:
-    import wandb  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
+    import wandb  
+except ImportError:  
     wandb = None
 
 matplotlib.use('Agg')
@@ -210,7 +210,7 @@ def train(config, exp_name=None, fixed_alpha=None):
     if hasattr(model, 'attention'):
         params_recon += list(model.attention.parameters())
 
-    # Decoder (original folding version has mlp + final_conv, new version has coarse_decoder + fine_decoder)
+    # Decoder 
     if hasattr(model, 'mlp'):
         params_recon += list(model.mlp.parameters())
     if hasattr(model, 'final_conv'):
@@ -292,7 +292,7 @@ def train(config, exp_name=None, fixed_alpha=None):
     best_epoch_l1 = -1
     train_step, val_step = 0, 0
     alpha = config.train.initial_alpha
-    loss1_improvement_threshold = config.train.loss1_improvement_threshold  # Define your own threshold
+    loss1_improvement_threshold = config.train.loss1_improvement_threshold 
     loss1_history = []
     min_improvement_epochs = config.train.min_improvement_epochs  # Number of epochs to look back for improvement
     changed_lr = False
@@ -540,8 +540,6 @@ def train(config, exp_name=None, fixed_alpha=None):
                 total_cd_l1 += cd_loss
                 mlp_loss = losses.mlp_loss_function(label, out_classifier) if train_config['classifier'] else 0.0
 
-                ## Modify from here
-
                 loss1_val_tensor = losses.cd_loss_l1(coarse_pred, c)  # Coarse loss tensor
                 loss2_val_tensor = losses.cd_loss_l1(dense_pred, c)  # Dense loss tensor
 
@@ -596,7 +594,7 @@ def train(config, exp_name=None, fixed_alpha=None):
                         })
 
 
-            min_lr = train_config['min_lr']  # This allows 4 zeros after the decimal point, but not 5
+            min_lr = train_config['min_lr'] 
 
             total_cd_l1 /= len(val_dataset)
             total_combined_loss_val /= len(val_dataset)

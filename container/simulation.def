@@ -32,7 +32,6 @@ From: ubuntu:20.04
 	cd smlm
 	pip install . 
 	cd scripts
-	# set the jar_path to the previously built java target
 	echo 'jar_path: "/JavaUmsetzungSTORMSimulation/STORMVis/target/suresim_cli.jar-jar-with-dependencies.jar"' >> config.yaml	
 
 %runscript

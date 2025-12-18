@@ -84,7 +84,7 @@ def load_model(model_path, device):
 def setup_transformations(highest_shape):
     """ Set up data transformations. """
     return transforms.Compose([
-        Padding(highest_shape),  # Assuming Padding and ToTensor are defined elsewhere as in training script
+        Padding(highest_shape), 
         ToTensor()
     ])
 
@@ -104,7 +104,7 @@ def infer_dataset(dataset, model):
     with torch.no_grad():
         for i, data in enumerate(dataloader):
             inputs = data['partial_pc'].to(device)
-            inputs = inputs.permute(0, 2, 1)  # Adjust dimensions as per model input requirement
+            inputs = inputs.permute(0, 2, 1)  
             outputs = model(inputs)
             predictions.append(outputs)
     return predictions

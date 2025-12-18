@@ -1,5 +1,5 @@
 dataset:
-  root_folder: '/home/dim26fa/data/sim_dna_old_2703_seed1234_test'
+  root_folder: 'demo_data/sim_dna_old_2703_seed1234_test'
   classes: ['all']
   suffix: '.csv'
   highest_shape: 500

@@ -1,0 +1,18 @@
+.git .gitignore
+pycache
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+venv/
+env/
+.env
+.venv
+.DS_Store
+
+weights/
+demo_data/

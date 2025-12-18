@@ -50,24 +50,26 @@ The `pip install .` command will compile the CUDA operators against the currentl
 To train PocaFoldAS on your data or the bundled demo data:
 
 1. Ensure dependencies are installed (see Installation).
-2. (Optional) Set envs for container paths: `TRAIN_LOG_DIR` (default `/workspace/smlm_logs`).
+2. Make sure `train.log_dir` in your config points to a writable directory for checkpoints/logs. When running in a container, mount the host folder you want to use (e.g., `-v /host/logs:/workspace/smlm_logs`) and set `train.log_dir` to that container path instead of relying on notebook-only env vars.
 3. Run: `python scripts/run_training.py --config configs/config_demo_data.yaml --exp_name demo_run`.
    - Uses `demo_data/tetrahedron_seed1121_train` by default via the config.
    - Logs/checkpoints go to the `log_dir` set in the config (override via env / config copy).
    - Set `train.use_wandb: true` in the config or toggle in the training notebook to log to Weights & Biases.
 
 ### Inference
-Use the demo test split and the provided tetra checkpoint (stored under `weights/`):
+For script-based inference (no notebook):
+1. Update the `test` section of your config (e.g., `configs/test_config.yaml`) so `ckpt_path` points to the trained weights and `log_dir` points to a writable output directory. Mount that folder when running in a container (e.g., `-v /host/infer:/workspace/smlm_inference`) and set `test.log_dir` to the container path.
+2. Ensure the dataset/test settings in the config reflect the split you want to evaluate (defaults use `demo_data/tetrahedron_seed1234_test`).
+3. Run `python scripts/test_pocafoldas.py --config configs/test_config.yaml`. Metrics and exported clouds are written under `test.log_dir`.
 
-- Point `POCAFOLDAS_CKPT` to the demo tetra checkpoint, e.g., `weights/pocafoldas_tetra_demo.pth` (adjust to actual filename).
-- If running in a container, set `POCAFOLDAS_INFER_OUT` to a writable/mounted directory (default `/workspace/smlm_inference`).
-- Run inference:
-  - Notebook: `tutorial/Inference_and_visualization.ipynb` (respects the env vars above).
-  - Or via script: `python scripts/test_pocafoldas.py --config configs/config_demo_data.yaml --ckpt $POCAFOLDAS_CKPT` (if you add a CLI wrapper).
+For notebooks we still expose env vars for convenience:
+- Set `POCAFOLDAS_CKPT` to the checkpoint (default `weights/tetra.pth`).
+- Set `POCAFOLDAS_INFER_OUT` if you need a different output directory (default `/workspace/smlm_inference`).
+- Use `tutorial/Inference_and_visualization.ipynb`, which respects those env vars.
 
 ### Tutorial notebooks
 
-We created tutorial notebooks for an easy understanding of the project.
+We created tutorial notebooks for an easy understanding of the project. 
 * Introduction and data simulation  <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Intro_and_data_simulation.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
@@ -80,14 +82,13 @@ We created tutorial notebooks for an easy understanding of the project.
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
-
 #### Running notebooks in a container
-To simplify environment requirements, we built a docker container of the repository. 
-- Mount a writable log/checkpoint folder: `-v /host/logs:/workspace/smlm_logs` (training outputs) and optionally `-v /host/infer:/workspace/smlm_inference` (inference outputs).
-- Set env vars for the notebooks: `TRAIN_LOG_DIR=/workspace/smlm_logs` for training, `POCAFOLDAS_CKPT` for a checkpoint, and `POCAFOLDAS_INFER_OUT` for inference outputs if you override the defaults.
-- Launch Jupyter/Colab inside the container from the repo root; the notebooks already respect these env vars and will write configs to `artifacts/notebook_configs/`.
-
-
+To run the notebooks from the container we created and avoid setting up all the enviroment from scratch, follow these steps: 
+- Pull the published image with Singularity if you prefer it over Docker: `singularity pull pocafoldas_latest.sif docker://dianamindroc/pocafoldas:latest`, then `singularity exec pocafoldas_latest.sif bash`
+- Mount a writable log/checkpoint folder: `-v /host/logs:/workspace/smlm_logs` (training outputs) and optionally `-v /host/infer:/workspace/smlm_inference` (inference outputs)
+- Map the notebook port from the container to the host when you start it (e.g., `-p 8888:8888` for Docker, or pass `--port 8888 --ip 0.0.0.0` to `jupyter lab` inside Singularity) so you can open the `http://127.0.0.1:<port>` in your browser.
+- After you start the container shell, export the env vars the notebooks read: `TRAIN_LOG_DIR=/workspace/smlm_logs` for training logs, `POCAFOLDAS_CKPT` for the checkpoint path, and `POCAFOLDAS_INFER_OUT` if you override the inference output directory
+- Launch Jupyter/Colab inside the container from the repo root
 
 ***
 
@@ -132,56 +133,76 @@ Edit the config file accordingly and run `python3 /smlm/scripts/run_simulation.p
 ### Contents
 
 ```
-smlm
-│   README.md  
-│   setup.py
-│   .gitignore
-│   LICENSE.txt
-│   requirements.txt
-└───configs
-│   │   config.yaml
-│   │   test_config.yaml
-└───container
-│   │   config.yaml
-│   │   training.def
-│   │   simulation.def
-└───dataset
-│   │   load_dataset.py
-│   │   ShapeNet.py
-│   │   SMLMDataset.py
-│   │   SMLMSimulator.py
-└───helpers
-│   │   chamfer.py
-│   │   data.py
-│   │   logging.py
-│   │   pc_stats.py
-│   │   readers.py
-│   │   visualization.py
-└───model_architectures
-│   │   adaptive_folding.py
-│   │   attention.py
-│   │   chamfer_distance_updated.py
-│   │   chamfer_distances.py
-│   │   folding_net.py
-│   │   losses.py
-│   │   pocafoldas.py
-│   │   pcn_decoder.py
-│   │   transforms.py
-│   │   utils.py
-└───notebooks
-│   │   visualization.ipynb
-│   │   smlm_preprocessing.ipynb 
-└───preprocessing
-│   │   preprocessing.py
-└───scripts
-│   │   run_simulation.py
-│   │   config.yaml
-│   │   main.py
-│   │   run_preprocessing.py
-└───simulation
-│   │   simulator.py
-│   │   simulate_data.py
-└───tutorial
-│   │   Intro_and_data_simulation.ipynb
-└──────  
+smlm/
+|-- Readme.md
+|-- setup.py
+|-- pyproject.toml
+|-- requirements.txt
+|-- Dockerfile
+|-- configs/                # YAML configs that drive training/inference experiments
+|   |-- config_demo_data.yaml
+|   |-- config_adapointr_bs8_lr0.01_schNone_test.yaml
+|   |-- config.yaml
+|   `-- test_config.yaml
+|-- container/              # Singularity definitions for reproducible training/simulation
+|   |-- training.def
+|   `-- simulation.def
+|-- dataset/                # Dataset wrappers and loaders
+|   |-- load_dataset.py
+|   |-- Dataset.py
+|   |-- ShapeNet.py
+|   |-- SMLMDataset.py
+|   `-- SMLMSimulator.py
+|-- demo_data/              # Small demo splits used by the configs
+|   |-- tetrahedron_seed1121_train/
+|   `-- tetrahedron_seed1234_test/
+|-- helpers/                # Shared utilities for data IO, logging, stats, config helpers
+|   |-- data.py
+|   |-- logging.py
+|   |-- pc_stats.py
+|   |-- readers.py
+|   |-- visualization.py
+|   `-- generate_config_files.py
+|-- model_architectures/    # Network definitions and loss layers
+|   |-- pocafoldas.py
+|   |-- folding_net.py
+|   |-- pcn_decoder.py
+|   |-- adaptive_folding.py
+|   |-- losses.py
+|   `-- transforms.py
+|-- notebooks/              # Research notebooks for experiments and visualization
+|   |-- Graph Autoencoder.ipynb
+|   |-- PointNet.ipynb
+|   |-- smlm_preprocessing.ipynb
+|   `-- visualization.ipynb
+|-- preprocessing/          # Point-cloud preprocessing CLI entry
+|   `-- preprocessing.py
+|-- resources/              # Static helper assets (paths, lookups)
+|   |-- highest_shape.csv
+|   `-- paths.txt
+|-- scripts/                # Command-line entry points and utilities
+|   |-- run_training.py
+|   |-- test_pocafoldas.py
+|   |-- run_simulation.py
+|   |-- simulate_data.py
+|   |-- run_preprocessing.py
+|   `-- npc_smlm_averaging.py
+|-- simulation/             # Higher-level simulation workflows
+|   |-- simulate_suresim_data.py
+|   |-- simulate_with_custom_model.py
+|   `-- suresim_simulator.py
+|-- tutorial/               # Hosted notebooks referenced in the README
+|   |-- Intro_and_data_simulation.ipynb
+|   |-- Network_training.ipynb
+|   `-- Inference_and_visualization.ipynb
+|-- chamfer_distance/       # CUDA chamfer distance op used by the models
+|   |-- chamfer_distance.cpp
+|   |-- chamfer_distance.cu
+|   `-- chamfer_distance.py
+|-- weights/                # Reference checkpoints distributed with the repo
+|   |-- tetra.pth
+|   `-- npc.pth
+|-- submodules/
+|   `-- dgcnn/              # External dependency for point-set baselines
+`-- figures/               # Static images used in papers/docs
 ```
