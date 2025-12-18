@@ -50,28 +50,22 @@ The `pip install .` command will compile the CUDA operators against the currentl
 To train PocaFoldAS on your data or the bundled demo data:
 
 1. Ensure dependencies are installed (see Installation).
-2. (Optional, container): set `TRAIN_LOG_DIR` (default `/workspace/smlm_logs`) to a mounted path for logs/checkpoints.
+2. (Optional) Set envs for container paths: `TRAIN_LOG_DIR` (default `/workspace/smlm_logs`).
 3. Run: `python scripts/run_training.py --config configs/config_demo_data.yaml --exp_name demo_run`.
    - Uses `demo_data/tetrahedron_seed1121_train` by default via the config.
    - Logs/checkpoints go to the `log_dir` set in the config (override via env / config copy).
-   - Set `train.use_wandb: true` in the config or toggle `USE_WANDB` in the training notebook; the notebook writes a config copy to `artifacts/notebook_configs/` respecting `TRAIN_LOG_DIR`.
+   - Set `train.use_wandb: true` in the config or toggle in the training notebook to log to Weights & Biases.
 
 ### Inference
 Use the demo test split and the provided tetra checkpoint (stored under `weights/`):
 
-- Point `POCAFOLDAS_CKPT` to the demo tetra checkpoint (e.g., `weights/tetra.pth`).
-- Test data default: `demo_data/tetrahedron_seed1234_test`; override with `DEMO_TEST_ROOT` if needed.
+- Point `POCAFOLDAS_CKPT` to the demo tetra checkpoint, e.g., `weights/pocafoldas_tetra_demo.pth` (adjust to actual filename).
 - If running in a container, set `POCAFOLDAS_INFER_OUT` to a writable/mounted directory (default `/workspace/smlm_inference`).
 - Run inference:
   - Notebook: `tutorial/Inference_and_visualization.ipynb` (respects the env vars above).
   - Or via script: `python scripts/test_pocafoldas.py --config configs/config_demo_data.yaml --ckpt $POCAFOLDAS_CKPT` (if you add a CLI wrapper).
 
 ### Tutorial notebooks
-
-#### Running notebooks in a container
-- Mount a writable log/checkpoint folder: `-v /host/logs:/workspace/smlm_logs` (training outputs) and optionally `-v /host/infer:/workspace/smlm_inference` (inference outputs).
-- Set env vars for the notebooks: `TRAIN_LOG_DIR=/workspace/smlm_logs` for training, `POCAFOLDAS_CKPT` for a checkpoint, and `POCAFOLDAS_INFER_OUT` for inference outputs if you override the defaults.
-- Launch Jupyter/Colab inside the container from the repo root; the notebooks already respect these env vars and will write configs to `artifacts/notebook_configs/`.
 
 We created tutorial notebooks for an easy understanding of the project.
 * Introduction and data simulation  <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Intro_and_data_simulation.ipynb">
@@ -85,6 +79,14 @@ We created tutorial notebooks for an easy understanding of the project.
 * Inference and visualization <a target="_blank" href="https://colab.research.google.com/github/dianamindroc/smlm/blob/master/tutorial/Inference_and_visualization.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
+
+
+#### Running notebooks in a container
+To simplify environment requirements, we built a docker container of the repository. 
+- Mount a writable log/checkpoint folder: `-v /host/logs:/workspace/smlm_logs` (training outputs) and optionally `-v /host/infer:/workspace/smlm_inference` (inference outputs).
+- Set env vars for the notebooks: `TRAIN_LOG_DIR=/workspace/smlm_logs` for training, `POCAFOLDAS_CKPT` for a checkpoint, and `POCAFOLDAS_INFER_OUT` for inference outputs if you override the defaults.
+- Launch Jupyter/Colab inside the container from the repo root; the notebooks already respect these env vars and will write configs to `artifacts/notebook_configs/`.
+
 
 
 ***
