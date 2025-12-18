@@ -93,8 +93,10 @@ def f_score(pred, gt, th=0.01):
 
 def mlp_loss_function(label, out_mlp):
     criterion = torch.nn.CrossEntropyLoss()
-    # Ensure labels are in the correct shape and type
+    # Ensure labels are integer class indices with shape (B,)
     targets = label.long()
+    if targets.dim() > 1:
+        targets = targets.squeeze(-1)
     mean_loss = criterion(out_mlp, targets)
     return mean_loss
 

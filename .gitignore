@@ -5,6 +5,8 @@ __pycache__
 
 .ipynb_checkpoints
 
+smlm.code-workspace
+
 .DS_Store
 .gitmodules
 

@@ -28,6 +28,7 @@ class SMLMDnaOrigami:
         self.dna_origami_list = []
         self.dna_origami = []
         self.apply_rotation = apply_rotation
+        self.fitted_distributions = None
         if stats is not None:
             self.stats = stats
             print('You provided a stats file. Simulating with prior knowledge.')
@@ -210,21 +211,26 @@ class SMLMDnaOrigami:
         """
         points = []
         iso_points = []
-        if self.stats:
+        if self.fitted_distributions:
             fitted_distributions = self.fitted_distributions
             shape_x, loc_x, scale_x = fitted_distributions['cluster_std_distribution']['x']['shape'], fitted_distributions['cluster_std_distribution']['x']['loc'], fitted_distributions['cluster_std_distribution']['x']['scale']
             shape_y, loc_y, scale_y = fitted_distributions['cluster_std_distribution']['y']['shape'], fitted_distributions['cluster_std_distribution']['y']['loc'], fitted_distributions['cluster_std_distribution']['y']['scale']
             shape_z, loc_z, scale_z = fitted_distributions['cluster_std_distribution']['z']['shape'], fitted_distributions['cluster_std_distribution']['z']['loc'], fitted_distributions['cluster_std_distribution']['z']['scale']
-            # Sample from the fitted distributions
+            # Sample from the fitted distributions once per corner
             std_x = lognorm.rvs(shape_x, loc=loc_x, scale=scale_x)
             std_y = lognorm.rvs(shape_y, loc=loc_y, scale=scale_y)
             std_z = lognorm.rvs(shape_z, loc=loc_z, scale=scale_z)
             shape_comb, loc_comb, scale_comb = fitted_distributions['cluster_std_combined']['shape'], fitted_distributions['cluster_std_combined']['loc'], fitted_distributions['cluster_std_combined']['scale']
-            std_comb = lognorm.rvs(shape_comb, loc_comb, scale_comb)
+            std_comb = lognorm.rvs(shape_comb, loc=loc_comb, scale=scale_comb)
         else:
+            # Fallback to heuristic standard deviations derived from photon count if we
+            # do not have fitted distributions available.
             photon_count = np.random.randint(1000, 5000)
-            std_x = 10 / np.sqrt(photon_count) * 1.5
-            std_y = 10 / np.sqrt(photon_count) * 1.5
+            std_xy = 10 / np.sqrt(photon_count) * 1.5
+            std_x = std_y = std_xy
+            # Slightly worse axial precision to mimic anisotropic measurements.
+            std_z = std_xy * 1.5
+            std_comb = std_xy
         for i in range(num_points):
                 #r = random.uniform(0, radius)
                 #r = np.clip(np.random.exponential(self.k * self.side), 0, self.side)
@@ -242,16 +248,6 @@ class SMLMDnaOrigami:
                 #theta = np.random.uniform(0, 2 * math.pi)
                 #phi = np.random.uniform(0, math.pi)
 
-                photon_count = np.random.randint(1000, 5000)
-                std_xy = 10 / np.sqrt(photon_count) * 1.5  # in nm
-                # precision_z = precision_xy * 2.5
-                #combined_std = np.sqrt(std_dev**2 + std_xy**2)
-                #std_z = np.mean([std_x, std_y])
-                # introduce linker error (?)
-                #x = np.random.normal(center[0] + r * math.sin(phi) * math.cos(theta), std_x)
-                #y = np.random.normal(center[1] + r * math.sin(phi) * math.sin(theta), std_y)
-                #z = np.random.normal(center[2] + r * math.cos(phi), std_z)
-                # simulate anisotropic point cloud
                 x = np.random.normal(center[0], std_x)
                 y = np.random.normal(center[1], std_y)
                 z = np.random.normal(center[2], std_z)
@@ -320,11 +316,14 @@ class SMLMDnaOrigami:
         return self.dna_origami, self.dna_origami_iso
 
     def generate_all_dna_origami_smlm_samples(self):
-        #np.random.seed(42)
         fitted_distributions = self.fitted_distributions
-        shape, loc, scale = (fitted_distributions['cluster_size_distribution']['shape'],
-                             fitted_distributions['cluster_size_distribution']['loc'],
-                             fitted_distributions['cluster_size_distribution']['scale'])
+        has_fitted = fitted_distributions is not None
+        if has_fitted:
+            shape, loc, scale = (
+                fitted_distributions['cluster_size_distribution']['shape'],
+                fitted_distributions['cluster_size_distribution']['loc'],
+                fitted_distributions['cluster_size_distribution']['scale']
+            )
         for i in range(self.number_samples):
             if self.apply_rotation:
                 self.rotate_model()
@@ -339,23 +338,36 @@ class SMLMDnaOrigami:
             #else:
             #    num_points = np.random.randint(400, 1400)
 
-            # Force loc=0 to prevent shifting
-            sampled_cluster_sizes = lognorm.rvs(shape, loc=loc, scale=scale, size=len(self.model_structure))
+            if has_fitted:
+                # Force loc=0 to prevent shifting
+                sampled_cluster_sizes = lognorm.rvs(shape, loc=loc, scale=scale, size=len(self.model_structure))
+            else:
+                sampled_cluster_sizes = self._sample_default_cluster_sizes()
             self.generate_one_dna_origami_smlm(sampled_cluster_sizes)
             self.save_samples(i)
             self.save_model_structure(i)
             #self.dna_origami = []
         sim_stats = load_and_analyze_point_clouds(os.path.join(self.base_folder, 'aniso'))
         sim_stats_dict = extract_stats(sim_stats)
-        exp_stats_dict = extract_stats(self.stats)
-        ks_tests = {
-            "p_x": ks_2samp(sim_stats_dict['cluster_std_x'], exp_stats_dict['cluster_std_x']),
-            "p_y": ks_2samp(sim_stats_dict['cluster_std_y'], exp_stats_dict['cluster_std_y']),
-            "p_z": ks_2samp(sim_stats_dict['cluster_std_z'], exp_stats_dict['cluster_std_z']),
-            "num_points": ks_2samp(sim_stats_dict['num_points'], exp_stats_dict['num_points']),
-            "cluster_sizes": ks_2samp(sim_stats_dict['cluster_sizes'], exp_stats_dict['cluster_sizes'])
-        }
-        return ks_tests
+        if self.stats:
+            exp_stats_dict = extract_stats(self.stats)
+            ks_tests = {
+                "p_x": ks_2samp(sim_stats_dict['cluster_std_x'], exp_stats_dict['cluster_std_x']),
+                "p_y": ks_2samp(sim_stats_dict['cluster_std_y'], exp_stats_dict['cluster_std_y']),
+                "p_z": ks_2samp(sim_stats_dict['cluster_std_z'], exp_stats_dict['cluster_std_z']),
+                "num_points": ks_2samp(sim_stats_dict['num_points'], exp_stats_dict['num_points']),
+                "cluster_sizes": ks_2samp(sim_stats_dict['cluster_sizes'], exp_stats_dict['cluster_sizes'])
+            }
+            return ks_tests
+        return None
+
+    def _sample_default_cluster_sizes(self):
+        """
+        Heuristic fallback for cluster sizes when no fitted distributions were provided.
+        """
+        min_points = 80
+        max_points = 200
+        return np.random.randint(min_points, max_points, size=len(self.model_structure))
 
     def rotate_model(self):
         random_rotation = R.random()
